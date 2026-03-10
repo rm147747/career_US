@@ -1,53 +1,48 @@
-# Mentoria Multiagente para Transição Médica aos EUA
+# Mentoria Multiagente para Transição Médica aos EUA (Next.js)
 
-Plataforma simples para rodadas de mentoria com 6 LLMs, em ordem fixa:
+Você estava certa: este projeto agora está em **Next.js**, pronto para deploy na **Vercel**.
 
-1. Claude Sonnet
-2. Gemini
-3. Perplexity
-4. Grok
-5. DeepSeek
-6. GPT (última versão)
+## O que a plataforma faz
 
-Você envia uma pergunta e cada agente responde **em sequência, sem interrupções**. Após o GPT, a palavra volta para você para continuar ou encerrar.
+- Recebe sua pergunta.
+- Executa uma rodada de 6 agentes em ordem fixa, sem interrupção:
+  1. Claude Sonnet
+  2. Gemini
+  3. Perplexity
+  4. Grok
+  5. DeepSeek
+  6. GPT
+- Após o GPT, a palavra volta para você para continuar ou encerrar.
 
-## Como funciona
+## Estrutura do projeto
 
-- Interface web em Streamlit.
-- Ordem de fala fixa (não há orquestrador inteligente).
-- Cada rodada usa o histórico da conversa para manter contexto.
-- Integração padrão via API compatível OpenAI (OpenRouter por padrão), com modelos configuráveis no painel lateral.
+- `package.json`
+- `next.config.js`
+- `app/page.js` (UI)
+- `app/api/mentoring/route.js` (API que faz as 6 chamadas sequenciais)
 
-## Requisitos
-
-- Python 3.10+
-- Chave de API (ex.: OpenRouter)
-
-## Instalação
+## Rodar localmente
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+npm install
+npm run dev
 ```
 
-## Execução
+Abra `http://localhost:3000`.
 
-```bash
-export OPENROUTER_API_KEY="sua_chave"
-streamlit run app.py
-```
+## Configuração no app
 
-Abra o navegador no endereço exibido pelo Streamlit (normalmente `http://localhost:8501`).
+Na própria interface você informa:
 
-## Configuração opcional
-
-No painel lateral você pode ajustar:
-
-- Base URL da API
-- Nome dos 6 modelos
+- API key
+- Base URL (padrão OpenRouter: `https://openrouter.ai/api/v1`)
+- Modelos dos 6 agentes (editáveis)
 - Temperatura e máximo de tokens
 
-## Observação
+## Deploy na Vercel
 
-Este projeto oferece mentoria de apoio e organização de pensamento. Não substitui aconselhamento legal, migratório, regulatório (USMLE/ECFMG/state board), nem aconselhamento clínico para pacientes.
+1. Suba este repositório no GitHub.
+2. Na Vercel, importe o repositório.
+3. Deploy padrão de Next.js.
+
+Não há orquestrador: apenas ordem fixa de respostas, como solicitado.
