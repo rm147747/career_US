@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Mentoria Multiagente EUA',
-  description: 'Rodadas fixas de mentoria com 6 LLMs para transição médica aos EUA.'
+  title: 'Board of Life',
+  description: 'Seus 6 conselheiros de IA para qualquer decisão importante.'
 };
 
 export default function RootLayout({ children }) {
