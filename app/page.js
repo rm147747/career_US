@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const defaultAgents = [
   { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6' },
@@ -24,7 +26,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const orderedNames = useMemo(() => agents.map((a) => a.displayName).join(' → '), [agents]);
+  const orderedNames = useMemo(() => agents.map((a) => a.displayName).join(' \u2192 '), [agents]);
 
   const updateAgentModel = (index, model) => {
     setAgents((prev) => prev.map((agent, i) => (i === index ? { ...agent, model } : agent)));
@@ -92,7 +94,7 @@ export default function HomePage() {
       <p style={{ color: '#444' }}>Seus 6 conselheiros, em ordem: {orderedNames}</p>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>Configuração</h3>
+        <h3>Configura\u00e7\u00e3o</h3>
         <label>API Key</label>
         <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" style={inputStyle} />
 
@@ -105,13 +107,13 @@ export default function HomePage() {
             <input type="number" min="0" max="1" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} style={inputStyle} />
           </div>
           <div>
-            <label>Máx. tokens</label>
+            <label>M\u00e1x. tokens</label>
             <input type="number" min="200" max="2000" step="50" value={maxTokens} onChange={(e) => setMaxTokens(Number(e.target.value))} style={inputStyle} />
           </div>
         </div>
 
-        <label>Prompt Global (instruções para todos os agentes)</label>
-        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Ex.: Você é um mentor especializado em apoiar médicos em transição para carreira nos EUA..." />
+        <label>Prompt Global (instru\u00e7\u00f5es para todos os agentes)</label>
+        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Ex.: Voc\u00ea \u00e9 um mentor especializado em apoiar m\u00e9dicos em transi\u00e7\u00e3o para carreira nos EUA..." />
 
         <h4>Modelos (ordem fixa)</h4>
         {agents.map((agent, index) => (
@@ -123,8 +125,8 @@ export default function HomePage() {
       </section>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>Sua questão para o Board</h3>
-        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Faça sua pergunta aos 6 conselheiros..." />
+        <h3>Sua quest\u00e3o para o Board</h3>
+        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Fa\u00e7a sua pergunta aos 6 conselheiros..." />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button disabled={isLoading} onClick={runRound} style={buttonStyle}>
@@ -140,25 +142,124 @@ export default function HomePage() {
         <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <h3>Pareceres do Board</h3>
           {roundResponses.map((item) => (
-            <article key={item.displayName} style={{ marginBottom: 14 }}>
-              <h4 style={{ marginBottom: 4 }}>{item.displayName}</h4>
-              <p style={{ marginTop: 0, whiteSpace: 'pre-wrap' }}>{item.answer}</p>
+            <article key={item.displayName} style={cardStyle}>
+              <h4 style={cardTitleStyle}>{item.displayName}</h4>
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.answer}</ReactMarkdown>
+              </div>
             </article>
           ))}
-          <p><strong>Todos os conselheiros se pronunciaram.</strong> A palavra é sua.</p>
+          <p><strong>Todos os conselheiros se pronunciaram.</strong> A palavra \u00e9 sua.</p>
         </section>
       )}
 
       {history.length > 0 && (
         <section style={{ background: '#fff', borderRadius: 12, padding: 16 }}>
-          <h3>Histórico</h3>
+          <h3>Hist\u00f3rico</h3>
           {history.map((msg, idx) => (
-            <p key={`${msg.role}-${idx}`} style={{ whiteSpace: 'pre-wrap' }}>
-              {msg.role === 'user' ? <strong>Você:</strong> : null} {msg.content}
-            </p>
+            <div key={`${msg.role}-${idx}`} style={{ marginBottom: 12 }}>
+              {msg.role === 'user' ? (
+                <p style={{ fontWeight: 600, color: '#111827' }}>Voc\u00ea: {msg.content}</p>
+              ) : (
+                <div className="markdown-body">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                </div>
+              )}
+            </div>
           ))}
         </section>
       )}
+
+      <style>{`
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+          margin-top: 1em;
+          margin-bottom: 0.5em;
+          font-weight: 600;
+          line-height: 1.3;
+          color: #111827;
+        }
+        .markdown-body h1 { font-size: 1.4em; }
+        .markdown-body h2 { font-size: 1.25em; }
+        .markdown-body h3 { font-size: 1.1em; }
+        .markdown-body h4 { font-size: 1em; }
+        .markdown-body p {
+          margin: 0.5em 0;
+          line-height: 1.65;
+        }
+        .markdown-body ul, .markdown-body ol {
+          margin: 0.5em 0;
+          padding-left: 1.5em;
+        }
+        .markdown-body li {
+          margin: 0.3em 0;
+          line-height: 1.6;
+        }
+        .markdown-body strong {
+          font-weight: 600;
+          color: #111827;
+        }
+        .markdown-body hr {
+          border: none;
+          border-top: 1px solid #e5e7eb;
+          margin: 1em 0;
+        }
+        .markdown-body blockquote {
+          border-left: 3px solid #6366f1;
+          margin: 0.8em 0;
+          padding: 0.4em 1em;
+          background: #f8f9ff;
+          border-radius: 0 6px 6px 0;
+          color: #374151;
+        }
+        .markdown-body code {
+          background: #f3f4f6;
+          padding: 0.15em 0.4em;
+          border-radius: 4px;
+          font-size: 0.9em;
+          font-family: 'Geist Mono', 'SF Mono', Consolas, monospace;
+        }
+        .markdown-body pre {
+          background: #1f2937;
+          color: #e5e7eb;
+          padding: 1em;
+          border-radius: 8px;
+          overflow-x: auto;
+          margin: 0.8em 0;
+        }
+        .markdown-body pre code {
+          background: none;
+          padding: 0;
+          color: inherit;
+        }
+        .markdown-body table {
+          border-collapse: collapse;
+          width: 100%;
+          margin: 0.8em 0;
+          font-size: 0.92em;
+        }
+        .markdown-body thead {
+          background: #f3f4f6;
+        }
+        .markdown-body th, .markdown-body td {
+          border: 1px solid #e5e7eb;
+          padding: 8px 12px;
+          text-align: left;
+        }
+        .markdown-body th {
+          font-weight: 600;
+          color: #111827;
+        }
+        .markdown-body tr:nth-child(even) {
+          background: #fafafa;
+        }
+        .markdown-body a {
+          color: #6366f1;
+          text-decoration: none;
+        }
+        .markdown-body a:hover {
+          text-decoration: underline;
+        }
+      `}</style>
     </main>
   );
 }
@@ -189,4 +290,21 @@ const secondaryButtonStyle = {
   borderRadius: 8,
   padding: '10px 14px',
   cursor: 'pointer'
+};
+
+const cardStyle = {
+  marginBottom: 20,
+  padding: 16,
+  background: '#fafbfc',
+  borderRadius: 10,
+  border: '1px solid #e5e7eb'
+};
+
+const cardTitleStyle = {
+  margin: '0 0 8px 0',
+  fontSize: '1.05em',
+  color: '#6366f1',
+  fontWeight: 600,
+  borderBottom: '2px solid #e5e7eb',
+  paddingBottom: 8
 };
