@@ -3,12 +3,12 @@
 import { useMemo, useState } from 'react';
 
 const defaultAgents = [
-  { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-3.5-sonnet' },
-  { displayName: 'Conselheiro 2 — Perplexity', model: 'perplexity/llama-3.1-sonar-large-128k-online' },
-  { displayName: 'Conselheiro 3 — Gemini', model: 'google/gemini-1.5-pro' },
-  { displayName: 'Conselheiro 4 — DeepSeek', model: 'deepseek/deepseek-chat' },
-  { displayName: 'Conselheiro 5 — Grok', model: 'x-ai/grok-2' },
-  { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-4o' }
+  { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6' },
+  { displayName: 'Conselheiro 2 — Perplexity', model: 'perplexity/sonar-pro' },
+  { displayName: 'Conselheiro 3 — Gemini', model: 'google/gemini-3-pro-preview' },
+  { displayName: 'Conselheiro 4 — DeepSeek', model: 'deepseek/deepseek-v3.2' },
+  { displayName: 'Conselheiro 5 — Grok', model: 'x-ai/grok-4.1-fast' },
+  { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-5.1' }
 ];
 
 export default function HomePage() {
