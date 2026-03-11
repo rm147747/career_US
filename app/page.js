@@ -26,7 +26,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const orderedNames = useMemo(() => agents.map((a) => a.displayName).join(' \u2192 '), [agents]);
+  const orderedNames = useMemo(() => agents.map((a) => a.displayName).join(' → '), [agents]);
 
   const updateAgentModel = (index, model) => {
     setAgents((prev) => prev.map((agent, i) => (i === index ? { ...agent, model } : agent)));
@@ -94,7 +94,7 @@ export default function HomePage() {
       <p style={{ color: '#444' }}>Seus 6 conselheiros, em ordem: {orderedNames}</p>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>Configura\u00e7\u00e3o</h3>
+        <h3>{'Configuração'}</h3>
         <label>API Key</label>
         <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" style={inputStyle} />
 
@@ -107,13 +107,13 @@ export default function HomePage() {
             <input type="number" min="0" max="1" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} style={inputStyle} />
           </div>
           <div>
-            <label>M\u00e1x. tokens</label>
+            <label>{'Máx. tokens'}</label>
             <input type="number" min="200" max="2000" step="50" value={maxTokens} onChange={(e) => setMaxTokens(Number(e.target.value))} style={inputStyle} />
           </div>
         </div>
 
-        <label>Prompt Global (instru\u00e7\u00f5es para todos os agentes)</label>
-        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Ex.: Voc\u00ea \u00e9 um mentor especializado em apoiar m\u00e9dicos em transi\u00e7\u00e3o para carreira nos EUA..." />
+        <label>{'Prompt Global (instruções para todos os agentes)'}</label>
+        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Defina o contexto para seus conselheiros..." />
 
         <h4>Modelos (ordem fixa)</h4>
         {agents.map((agent, index) => (
@@ -125,8 +125,8 @@ export default function HomePage() {
       </section>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>Sua quest\u00e3o para o Board</h3>
-        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Fa\u00e7a sua pergunta aos 6 conselheiros..." />
+        <h3>{'Sua questão para o Board'}</h3>
+        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Pergunte aos seus 6 conselheiros..." />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button disabled={isLoading} onClick={runRound} style={buttonStyle}>
@@ -149,17 +149,17 @@ export default function HomePage() {
               </div>
             </article>
           ))}
-          <p><strong>Todos os conselheiros se pronunciaram.</strong> A palavra \u00e9 sua.</p>
+          <p><strong>Todos os conselheiros se pronunciaram.</strong> A palavra é sua.</p>
         </section>
       )}
 
       {history.length > 0 && (
         <section style={{ background: '#fff', borderRadius: 12, padding: 16 }}>
-          <h3>Hist\u00f3rico</h3>
+          <h3>{'Histórico'}</h3>
           {history.map((msg, idx) => (
             <div key={`${msg.role}-${idx}`} style={{ marginBottom: 12 }}>
               {msg.role === 'user' ? (
-                <p style={{ fontWeight: 600, color: '#111827' }}>Voc\u00ea: {msg.content}</p>
+                <p style={{ fontWeight: 600, color: '#111827' }}>{'Você: '}{msg.content}</p>
               ) : (
                 <div className="markdown-body">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
