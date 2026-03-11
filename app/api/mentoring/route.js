@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 
-const SYSTEM_PROMPT =
-  'Você é um mentor especializado em apoiar médicos em transição para carreira nos EUA. ' +
-  'Responda de forma prática, ética e organizada. ' +
-  'Considere contexto de oncologia, processos seletivos, documentação, comunicação profissional, ' +
-  'estratégia de candidatura e preparação de entrevistas. ' +
-  'Não invente regras regulatórias; quando houver incerteza, destaque validações necessárias.';
+const DEFAULT_SYSTEM_PROMPT =
+  'Você é um conselheiro experiente e ponderado do Board of Life. ' +
+  'Responda de forma prática, objetiva e organizada. ' +
+  'Ofereça perspectivas únicas, considere riscos e oportunidades, e seja direto nas recomendações. ' +
+  'Quando houver incerteza, destaque o que precisa ser verificado.';
 
 async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxTokens }) {
   const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
@@ -15,7 +14,7 @@ async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxToken
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': 'https://vercel.app',
-      'X-Title': 'Mentoria Multiagente EUA'
+      'X-Title': 'Board of Life'
     },
     body: JSON.stringify({
       model,
@@ -35,13 +34,14 @@ async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxToken
 
 export async function POST(request) {
   try {
-    const { baseUrl, apiKey, agents, history, temperature, maxTokens } = await request.json();
+    const { baseUrl, apiKey, agents, history, temperature, maxTokens, systemPrompt } = await request.json();
 
     if (!apiKey || !baseUrl || !Array.isArray(agents) || agents.length !== 6) {
       return NextResponse.json({ error: 'Payload inválido. Verifique API key, base URL e 6 agentes.' }, { status: 400 });
     }
 
-    const runningMessages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(history || [])];
+    const finalPrompt = systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
+    const runningMessages = [{ role: 'system', content: finalPrompt }, ...(history || [])];
     const responses = [];
 
     for (const agent of agents) {
