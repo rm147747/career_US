@@ -3,12 +3,12 @@
 import { useMemo, useState } from 'react';
 
 const defaultAgents = [
-  { displayName: 'Agente 1 — Claude Sonnet', model: 'anthropic/claude-3.5-sonnet' },
-  { displayName: 'Agente 2 — Gemini', model: 'google/gemini-1.5-pro' },
-  { displayName: 'Agente 3 — Perplexity', model: 'perplexity/llama-3.1-sonar-large-128k-online' },
-  { displayName: 'Agente 4 — Grok', model: 'x-ai/grok-2' },
-  { displayName: 'Agente 5 — DeepSeek', model: 'deepseek/deepseek-chat' },
-  { displayName: 'Agente 6 — GPT', model: 'openai/gpt-4o' }
+  { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-3.5-sonnet' },
+  { displayName: 'Conselheiro 2 — Perplexity', model: 'perplexity/llama-3.1-sonar-large-128k-online' },
+  { displayName: 'Conselheiro 3 — Gemini', model: 'google/gemini-1.5-pro' },
+  { displayName: 'Conselheiro 4 — DeepSeek', model: 'deepseek/deepseek-chat' },
+  { displayName: 'Conselheiro 5 — Grok', model: 'x-ai/grok-2' },
+  { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-4o' }
 ];
 
 export default function HomePage() {
@@ -17,6 +17,7 @@ export default function HomePage() {
   const [question, setQuestion] = useState('');
   const [temperature, setTemperature] = useState(0.4);
   const [maxTokens, setMaxTokens] = useState(700);
+  const [systemPrompt, setSystemPrompt] = useState('');
   const [agents, setAgents] = useState(defaultAgents);
   const [history, setHistory] = useState([]);
   const [roundResponses, setRoundResponses] = useState([]);
@@ -52,6 +53,7 @@ export default function HomePage() {
           apiKey,
           temperature,
           maxTokens,
+          systemPrompt,
           agents,
           history: nextHistory
         })
@@ -86,8 +88,8 @@ export default function HomePage() {
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
-      <h1>Mentoria Multiagente para Mudança aos EUA</h1>
-      <p style={{ color: '#444' }}>Rodada fixa sem interrupções: {orderedNames}</p>
+      <h1>Board of Life</h1>
+      <p style={{ color: '#444' }}>Seus 6 conselheiros, em ordem: {orderedNames}</p>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <h3>Configuração</h3>
@@ -108,6 +110,9 @@ export default function HomePage() {
           </div>
         </div>
 
+        <label>Prompt Global (instruções para todos os agentes)</label>
+        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Ex.: Você é um mentor especializado em apoiar médicos em transição para carreira nos EUA..." />
+
         <h4>Modelos (ordem fixa)</h4>
         {agents.map((agent, index) => (
           <div key={agent.displayName} style={{ marginBottom: 8 }}>
@@ -118,12 +123,12 @@ export default function HomePage() {
       </section>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>Seu questionamento</h3>
-        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Ex.: Como estruturar minha preparação para entrevistas clínicas nos próximos 60 dias?" />
+        <h3>Sua questão para o Board</h3>
+        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Faça sua pergunta aos 6 conselheiros..." />
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button disabled={isLoading} onClick={runRound} style={buttonStyle}>
-            {isLoading ? 'Executando rodada...' : 'Iniciar rodada de mentoria'}
+            {isLoading ? 'Consultando o Board...' : 'Consultar o Board'}
           </button>
           <button disabled={isLoading} onClick={clearConversation} style={secondaryButtonStyle}>Limpar conversa</button>
         </div>
@@ -133,14 +138,14 @@ export default function HomePage() {
 
       {roundResponses.length > 0 && (
         <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <h3>Rodada atual</h3>
+          <h3>Pareceres do Board</h3>
           {roundResponses.map((item) => (
             <article key={item.displayName} style={{ marginBottom: 14 }}>
               <h4 style={{ marginBottom: 4 }}>{item.displayName}</h4>
               <p style={{ marginTop: 0, whiteSpace: 'pre-wrap' }}>{item.answer}</p>
             </article>
           ))}
-          <p><strong>Rodada concluída.</strong> Agora a palavra volta para você.</p>
+          <p><strong>Todos os conselheiros se pronunciaram.</strong> A palavra é sua.</p>
         </section>
       )}
 
