@@ -14,6 +14,15 @@ const defaultAgents = [
   { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-5.1' }
 ];
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function HomePage() {
   const [baseUrl, setBaseUrl] = useState('https://openrouter.ai/api/v1');
   const [apiKey, setApiKey] = useState('');
@@ -26,6 +35,63 @@ export default function HomePage() {
   const [roundResponses, setRoundResponses] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // --- Attachments ---
+  const [attachments, setAttachments] = useState([]); // { name, type, data, preview? }
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const ACCEPTED_EXTENSIONS = '.txt,.csv,.md,.json,.pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp';
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setIsProcessing(true);
+    setError('');
+
+    const newAttachments = [];
+    for (const file of files) {
+      try {
+        if (IMAGE_TYPES.includes(file.type)) {
+          // Images: convert to base64 for multimodal API
+          const base64 = await fileToBase64(file);
+          newAttachments.push({
+            name: file.name,
+            type: 'image',
+            mimeType: file.type,
+            data: base64,
+            preview: URL.createObjectURL(file),
+          });
+        } else {
+          // Documents: extract text via server
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch('/api/extract', { method: 'POST', body: formData });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.error);
+          newAttachments.push({
+            name: file.name,
+            type: 'document',
+            data: result.text,
+            warning: result.warning,
+          });
+        }
+      } catch (err) {
+        setError(`Erro ao processar ${file.name}: ${err.message}`);
+      }
+    }
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    setIsProcessing(false);
+    e.target.value = '';
+  };
+
+  const removeAttachment = (index) => {
+    setAttachments((prev) => {
+      const removed = prev[index];
+      if (removed?.preview) URL.revokeObjectURL(removed.preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   // --- Memory / Sessions ---
   const [currentSessionId, setCurrentSessionId] = useState(null);
@@ -106,7 +172,26 @@ export default function HomePage() {
     }
 
     setIsLoading(true);
-    const nextHistory = [...history, { role: 'user', content: question.trim() }];
+
+    // Build user message with attachments
+    let userContent = question.trim();
+    const imageAttachments = [];
+    const docTexts = [];
+
+    for (const att of attachments) {
+      if (att.type === 'image') {
+        imageAttachments.push({ mimeType: att.mimeType, base64: att.data, name: att.name });
+      } else {
+        docTexts.push(`\n\n--- Documento anexado: ${att.name} ---\n${att.data}\n--- Fim do documento ---`);
+      }
+    }
+
+    if (docTexts.length > 0) {
+      userContent += docTexts.join('');
+    }
+
+    const userMessage = { role: 'user', content: userContent };
+    const nextHistory = [...history, userMessage];
 
     try {
       const response = await fetch('/api/mentoring', {
@@ -119,7 +204,8 @@ export default function HomePage() {
           maxTokens,
           systemPrompt,
           agents,
-          history: nextHistory
+          history: nextHistory,
+          images: imageAttachments,
         })
       });
 
@@ -136,6 +222,7 @@ export default function HomePage() {
       setHistory([...nextHistory, ...assistantMessages]);
       setRoundResponses(data.responses);
       setQuestion('');
+      setAttachments([]);
     } catch (err) {
       setError(err.message || 'Erro inesperado.');
     } finally {
@@ -239,8 +326,45 @@ export default function HomePage() {
         <h3>{'Sua questão para o Board'}</h3>
         <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Pergunte aos seus 6 conselheiros..." />
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button disabled={isLoading} onClick={runRound} style={buttonStyle}>
+        {/* File attachments */}
+        <div style={{ marginTop: 4, marginBottom: 8 }}>
+          <label htmlFor="file-upload" style={{ ...secondaryButtonStyle, display: 'inline-block', cursor: 'pointer', fontSize: '0.9em', padding: '6px 12px' }}>
+            {isProcessing ? 'Processando...' : 'Anexar arquivos'}
+          </label>
+          <input
+            id="file-upload"
+            type="file"
+            multiple
+            accept={ACCEPTED_EXTENSIONS}
+            onChange={handleFileSelect}
+            disabled={isProcessing || isLoading}
+            style={{ display: 'none' }}
+          />
+          <span style={{ marginLeft: 8, fontSize: '0.8em', color: '#9ca3af' }}>
+            PDF, DOCX, TXT, CSV, MD, JPG, PNG, GIF, WEBP
+          </span>
+        </div>
+
+        {attachments.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            {attachments.map((att, idx) => (
+              <div key={`${att.name}-${idx}`} style={attachmentChipStyle}>
+                {att.type === 'image' && att.preview && (
+                  <img src={att.preview} alt={att.name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} />
+                )}
+                <span style={{ fontSize: '0.85em', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {att.name}
+                </span>
+                <button onClick={() => removeAttachment(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b00020', fontWeight: 700, fontSize: '1em', padding: '0 2px' }}>
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button disabled={isLoading || isProcessing} onClick={runRound} style={buttonStyle}>
             {isLoading ? 'Consultando o Board...' : 'Consultar o Board'}
           </button>
           <button disabled={isLoading} onClick={clearConversation} style={secondaryButtonStyle}>Limpar conversa</button>
@@ -409,6 +533,16 @@ const cardStyle = {
   background: '#fafbfc',
   borderRadius: 10,
   border: '1px solid #e5e7eb'
+};
+
+const attachmentChipStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 10px',
+  background: '#f3f4f6',
+  borderRadius: 8,
+  border: '1px solid #e5e7eb',
 };
 
 const cardTitleStyle = {
