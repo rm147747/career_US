@@ -106,6 +106,12 @@ export default function HomePage() {
     });
   };
 
+  // --- Memory / Sessions (declared early — used by export and tools) ---
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [showSessions, setShowSessions] = useState(false);
+  const [sessionName, setSessionName] = useState('');
+
   // --- Tools ---
   const [showTools, setShowTools] = useState(false);
   const [githubUrl, setGithubUrl] = useState('');
@@ -256,12 +262,6 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
     w.document.close();
     w.print();
   }, [history, sessionName]);
-
-  // --- Memory / Sessions ---
-  const [currentSessionId, setCurrentSessionId] = useState(null);
-  const [sessions, setSessions] = useState([]);
-  const [showSessions, setShowSessions] = useState(false);
-  const [sessionName, setSessionName] = useState('');
 
   // Load session list on mount
   useEffect(() => {
