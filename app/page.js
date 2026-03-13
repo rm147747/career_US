@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { listSessions, loadSession, saveSession, deleteSession, renameSession } from './memory';
 
 const defaultAgents = [
   { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6' },
@@ -25,6 +26,67 @@ export default function HomePage() {
   const [roundResponses, setRoundResponses] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // --- Memory / Sessions ---
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [showSessions, setShowSessions] = useState(false);
+  const [sessionName, setSessionName] = useState('');
+
+  // Load session list on mount
+  useEffect(() => {
+    setSessions(listSessions());
+  }, []);
+
+  // Auto-save history to current session whenever history changes
+  useEffect(() => {
+    if (history.length === 0) return;
+    const id = saveSession({
+      id: currentSessionId,
+      name: sessionName || undefined,
+      history,
+      systemPrompt,
+    });
+    if (!currentSessionId) setCurrentSessionId(id);
+    setSessions(listSessions());
+  }, [history]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLoadSession = useCallback((id) => {
+    const session = loadSession(id);
+    if (!session) return;
+    setCurrentSessionId(id);
+    setSessionName(session.name);
+    setHistory(session.history);
+    setSystemPrompt(session.systemPrompt || '');
+    setRoundResponses([]);
+    setShowSessions(false);
+  }, []);
+
+  const handleDeleteSession = useCallback((id) => {
+    deleteSession(id);
+    setSessions(listSessions());
+    if (id === currentSessionId) {
+      setCurrentSessionId(null);
+      setSessionName('');
+      setHistory([]);
+      setRoundResponses([]);
+    }
+  }, [currentSessionId]);
+
+  const handleRenameSession = useCallback((id, newName) => {
+    renameSession(id, newName);
+    setSessions(listSessions());
+    if (id === currentSessionId) setSessionName(newName);
+  }, [currentSessionId]);
+
+  const handleNewSession = useCallback(() => {
+    setCurrentSessionId(null);
+    setSessionName('');
+    setHistory([]);
+    setRoundResponses([]);
+    setQuestion('');
+    setError('');
+  }, []);
 
   const orderedNames = useMemo(() => agents.map((a) => a.displayName).join(' → '), [agents]);
 
@@ -82,6 +144,8 @@ export default function HomePage() {
   };
 
   const clearConversation = () => {
+    setCurrentSessionId(null);
+    setSessionName('');
     setHistory([]);
     setRoundResponses([]);
     setQuestion('');
@@ -92,6 +156,53 @@ export default function HomePage() {
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
       <h1>Board of Life</h1>
       <p style={{ color: '#444' }}>Seus 6 conselheiros, em ordem: {orderedNames}</p>
+
+      {/* --- Session / Memory Panel --- */}
+      <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Memória</h3>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={() => setShowSessions((v) => !v)} style={secondaryButtonStyle}>
+              {showSessions ? 'Fechar sessões' : `Sessões salvas (${sessions.length})`}
+            </button>
+            <button onClick={handleNewSession} style={secondaryButtonStyle}>Nova sessão</button>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <label>Nome da sessão atual</label>
+          <input
+            value={sessionName}
+            onChange={(e) => {
+              setSessionName(e.target.value);
+              if (currentSessionId) renameSession(currentSessionId, e.target.value);
+            }}
+            placeholder="Ex.: Planejamento Q1, Carreira EUA..."
+            style={inputStyle}
+          />
+        </div>
+
+        {currentSessionId && (
+          <p style={{ fontSize: '0.85em', color: '#6b7280', margin: 0 }}>
+            Sessão ativa: <strong>{sessionName || currentSessionId}</strong> — {history.length} mensagens (salvamento automático)
+          </p>
+        )}
+
+        {showSessions && (
+          <div style={{ marginTop: 12 }}>
+            {sessions.length === 0 && <p style={{ color: '#9ca3af' }}>Nenhuma sessão salva ainda.</p>}
+            {sessions.map((s) => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ flex: 1, fontWeight: s.id === currentSessionId ? 600 : 400 }}>
+                  {s.name} <span style={{ color: '#9ca3af', fontSize: '0.85em' }}>({s.messageCount} msgs — {new Date(s.updatedAt).toLocaleDateString('pt-BR')})</span>
+                </span>
+                <button onClick={() => handleLoadSession(s.id)} style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '0.85em' }}>Carregar</button>
+                <button onClick={() => handleDeleteSession(s.id)} style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '0.85em', color: '#b00020' }}>Excluir</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <h3>{'Configuração'}</h3>
