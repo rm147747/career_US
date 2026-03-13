@@ -34,14 +34,32 @@ async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxToken
 
 export async function POST(request) {
   try {
-    const { baseUrl, apiKey, agents, history, temperature, maxTokens, systemPrompt } = await request.json();
+    const { baseUrl, apiKey, agents, history, temperature, maxTokens, systemPrompt, images } = await request.json();
 
     if (!apiKey || !baseUrl || !Array.isArray(agents) || agents.length !== 6) {
       return NextResponse.json({ error: 'Payload inválido. Verifique API key, base URL e 6 agentes.' }, { status: 400 });
     }
 
     const finalPrompt = systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
-    const runningMessages = [{ role: 'system', content: finalPrompt }, ...(history || [])];
+
+    // Build messages, converting the last user message to multimodal if images are attached
+    let processedHistory = [...(history || [])];
+    if (Array.isArray(images) && images.length > 0 && processedHistory.length > 0) {
+      const lastIdx = processedHistory.length - 1;
+      const lastMsg = processedHistory[lastIdx];
+      if (lastMsg.role === 'user') {
+        const contentParts = [{ type: 'text', text: lastMsg.content }];
+        for (const img of images) {
+          contentParts.push({
+            type: 'image_url',
+            image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+          });
+        }
+        processedHistory[lastIdx] = { role: 'user', content: contentParts };
+      }
+    }
+
+    const runningMessages = [{ role: 'system', content: finalPrompt }, ...processedHistory];
     const responses = [];
 
     for (const agent of agents) {
