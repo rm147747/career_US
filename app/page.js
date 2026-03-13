@@ -14,6 +14,19 @@ const defaultAgents = [
   { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-5.1' }
 ];
 
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -92,6 +105,157 @@ export default function HomePage() {
       return prev.filter((_, i) => i !== index);
     });
   };
+
+  // --- Tools ---
+  const [showTools, setShowTools] = useState(false);
+  const [githubUrl, setGithubUrl] = useState('');
+  const [codeInput, setCodeInput] = useState('');
+  const [codeLang, setCodeLang] = useState('python');
+  const [databankQuery, setDatabankQuery] = useState('');
+  const [databankSource, setDatabankSource] = useState('pubmed');
+  const [toolResults, setToolResults] = useState([]); // { label, content }
+  const [toolLoading, setToolLoading] = useState('');
+
+  const fetchGitHub = async () => {
+    if (!githubUrl.trim()) return;
+    setToolLoading('github');
+    try {
+      const res = await fetch('/api/tools/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: githubUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setToolResults((prev) => [...prev, { label: `GitHub: ${githubUrl.trim().split('/').slice(-2).join('/')}`, content: data.content }]);
+      setGithubUrl('');
+    } catch (err) {
+      setError(`GitHub: ${err.message}`);
+    }
+    setToolLoading('');
+  };
+
+  const executeCode = async () => {
+    if (!codeInput.trim()) return;
+    setToolLoading('execute');
+    try {
+      const res = await fetch('/api/tools/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeInput, language: codeLang }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      const output = data.success
+        ? `Saída:\n${data.stdout}${data.stderr ? `\nStderr:\n${data.stderr}` : ''}`
+        : `Erro:\n${data.stderr || data.error}`;
+      setToolResults((prev) => [...prev, { label: `Código ${codeLang}`, content: `\`\`\`${codeLang}\n${codeInput}\n\`\`\`\n\n${output}` }]);
+      setCodeInput('');
+    } catch (err) {
+      setError(`Execução: ${err.message}`);
+    }
+    setToolLoading('');
+  };
+
+  const queryDatabank = async () => {
+    if (!databankQuery.trim()) return;
+    setToolLoading('databank');
+    try {
+      const res = await fetch('/api/tools/databank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: databankQuery.trim(), source: databankSource }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      let formatted = `Fonte: ${data.source} | Query: "${data.query}"`;
+      if (data.total) formatted += ` | Total: ${data.total}`;
+      formatted += '\n\n';
+      for (const r of data.results) {
+        if (data.source === 'pubmed') {
+          formatted += `- **${r.title}** (${r.date})\n  ${r.authors}\n  ${r.journal} | ${r.url}\n\n`;
+        } else if (data.source === 'clinicaltrials') {
+          formatted += `- **${r.title}** [${r.nctId}] — ${r.status} (${r.phase})\n  ${r.summary}\n  ${r.url}\n\n`;
+        } else {
+          formatted += `- **${r.title}**\n  ${r.extract || r.snippet || ''}\n  ${r.url}\n\n`;
+        }
+      }
+      setToolResults((prev) => [...prev, { label: `${databankSource}: ${databankQuery.trim().slice(0, 30)}`, content: formatted }]);
+      setDatabankQuery('');
+    } catch (err) {
+      setError(`Databank: ${err.message}`);
+    }
+    setToolLoading('');
+  };
+
+  const removeToolResult = (index) => {
+    setToolResults((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // --- Export ---
+  const buildExportText = useCallback(() => {
+    let text = `Board of Life — ${sessionName || 'Sessão'}\n${'='.repeat(50)}\n\n`;
+    for (const msg of history) {
+      if (msg.role === 'user') {
+        text += `VOCÊ:\n${msg.content}\n\n`;
+      } else {
+        text += `${msg.content}\n\n`;
+      }
+      text += `${'-'.repeat(50)}\n\n`;
+    }
+    return text;
+  }, [history, sessionName]);
+
+  const copyToClipboard = useCallback(() => {
+    navigator.clipboard.writeText(buildExportText());
+  }, [buildExportText]);
+
+  const exportAsText = useCallback(() => {
+    const blob = new Blob([buildExportText()], { type: 'text/plain;charset=utf-8' });
+    downloadBlob(blob, `${sessionName || 'board-of-life'}.txt`);
+  }, [buildExportText, sessionName]);
+
+  const exportAsHtml = useCallback(() => {
+    let html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Board of Life — ${sessionName || 'Sessão'}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#111827}
+.user{font-weight:600;background:#f0f4ff;padding:12px;border-radius:8px;margin:12px 0}
+.agent{padding:12px;border-left:3px solid #6366f1;margin:12px 0;background:#fafbfc;border-radius:0 8px 8px 0}
+h1{color:#6366f1}hr{border:none;border-top:1px solid #e5e7eb;margin:20px 0}</style></head><body>
+<h1>Board of Life</h1><p>${sessionName || 'Sessão exportada'}</p><hr>\n`;
+    for (const msg of history) {
+      if (msg.role === 'user') {
+        html += `<div class="user"><strong>Você:</strong><br>${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
+      } else {
+        html += `<div class="agent">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
+      }
+    }
+    html += '</body></html>';
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    downloadBlob(blob, `${sessionName || 'board-of-life'}.html`);
+  }, [history, sessionName]);
+
+  const printConversation = useCallback(() => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    let html = `<html><head><title>Board of Life</title>
+<style>body{font-family:system-ui,sans-serif;max-width:700px;margin:20px auto;color:#111827;font-size:12pt}
+.user{font-weight:600;background:#f0f4ff;padding:10px;border-radius:6px;margin:10px 0}
+.agent{padding:10px;border-left:3px solid #6366f1;margin:10px 0;background:#fafbfc}
+h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:15px 0}
+@media print{body{margin:0;font-size:10pt}}</style></head><body>
+<h1>Board of Life</h1><p>${sessionName || 'Sessão'} — ${new Date().toLocaleDateString('pt-BR')}</p><hr>\n`;
+    for (const msg of history) {
+      if (msg.role === 'user') {
+        html += `<div class="user"><strong>Você:</strong><br>${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
+      } else {
+        html += `<div class="agent">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
+      }
+    }
+    html += '</body></html>';
+    w.document.write(html);
+    w.document.close();
+    w.print();
+  }, [history, sessionName]);
 
   // --- Memory / Sessions ---
   const [currentSessionId, setCurrentSessionId] = useState(null);
@@ -190,6 +354,11 @@ export default function HomePage() {
       userContent += docTexts.join('');
     }
 
+    // Append tool results as context
+    for (const tr of toolResults) {
+      userContent += `\n\n--- ${tr.label} ---\n${tr.content}\n--- Fim ---`;
+    }
+
     const userMessage = { role: 'user', content: userContent };
     const nextHistory = [...history, userMessage];
 
@@ -223,6 +392,7 @@ export default function HomePage() {
       setRoundResponses(data.responses);
       setQuestion('');
       setAttachments([]);
+      setToolResults([]);
     } catch (err) {
       setError(err.message || 'Erro inesperado.');
     } finally {
@@ -322,6 +492,77 @@ export default function HomePage() {
         ))}
       </section>
 
+      {/* --- Tools Panel --- */}
+      <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ margin: 0 }}>Ferramentas</h3>
+          <button onClick={() => setShowTools((v) => !v)} style={secondaryButtonStyle}>
+            {showTools ? 'Fechar' : 'Abrir ferramentas'}
+          </button>
+        </div>
+
+        {showTools && (
+          <div style={{ marginTop: 12 }}>
+            {/* GitHub */}
+            <div style={{ marginBottom: 16, padding: 12, background: '#fafbfc', borderRadius: 8 }}>
+              <h4 style={{ margin: '0 0 8px', color: '#6366f1' }}>GitHub — Buscar arquivo</h4>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} placeholder="https://github.com/user/repo/blob/main/file.py" style={{ ...inputStyle, flex: 1, marginBottom: 0 }} />
+                <button onClick={fetchGitHub} disabled={toolLoading === 'github'} style={{ ...buttonStyle, whiteSpace: 'nowrap' }}>
+                  {toolLoading === 'github' ? 'Buscando...' : 'Buscar'}
+                </button>
+              </div>
+            </div>
+
+            {/* Code execution */}
+            <div style={{ marginBottom: 16, padding: 12, background: '#fafbfc', borderRadius: 8 }}>
+              <h4 style={{ margin: '0 0 8px', color: '#6366f1' }}>Executar código</h4>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <select value={codeLang} onChange={(e) => setCodeLang(e.target.value)} style={{ ...inputStyle, width: 'auto', marginBottom: 0 }}>
+                  <option value="python">Python</option>
+                  <option value="r">R</option>
+                </select>
+                <button onClick={executeCode} disabled={toolLoading === 'execute'} style={buttonStyle}>
+                  {toolLoading === 'execute' ? 'Executando...' : 'Executar'}
+                </button>
+              </div>
+              <textarea value={codeInput} onChange={(e) => setCodeInput(e.target.value)} rows={5} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.9em', marginBottom: 0 }} placeholder="print('Hello World')" />
+            </div>
+
+            {/* Databank */}
+            <div style={{ padding: 12, background: '#fafbfc', borderRadius: 8 }}>
+              <h4 style={{ margin: '0 0 8px', color: '#6366f1' }}>Bancos de dados públicos</h4>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <select value={databankSource} onChange={(e) => setDatabankSource(e.target.value)} style={{ ...inputStyle, width: 'auto', marginBottom: 0 }}>
+                  <option value="pubmed">PubMed</option>
+                  <option value="clinicaltrials">ClinicalTrials.gov</option>
+                  <option value="wikipedia">Wikipedia</option>
+                </select>
+                <input value={databankQuery} onChange={(e) => setDatabankQuery(e.target.value)} placeholder="Ex.: oncology immunotherapy" style={{ ...inputStyle, flex: 1, marginBottom: 0 }} />
+                <button onClick={queryDatabank} disabled={toolLoading === 'databank'} style={buttonStyle}>
+                  {toolLoading === 'databank' ? 'Buscando...' : 'Pesquisar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tool results chips */}
+        {toolResults.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <p style={{ fontSize: '0.85em', color: '#6b7280', margin: '0 0 6px' }}>Contexto coletado (será incluído na próxima consulta):</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {toolResults.map((tr, idx) => (
+                <div key={`tr-${idx}`} style={{ ...attachmentChipStyle, background: '#eef2ff' }}>
+                  <span style={{ fontSize: '0.82em' }}>{tr.label}</span>
+                  <button onClick={() => removeToolResult(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b00020', fontWeight: 700, padding: '0 2px' }}>×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
         <h3>{'Sua questão para o Board'}</h3>
         <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Pergunte aos seus 6 conselheiros..." />
@@ -390,7 +631,15 @@ export default function HomePage() {
 
       {history.length > 0 && (
         <section style={{ background: '#fff', borderRadius: 12, padding: 16 }}>
-          <h3>{'Histórico'}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            <h3 style={{ margin: 0 }}>{'Histórico'}</h3>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={copyToClipboard} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Copiar tudo</button>
+              <button onClick={exportAsText} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Exportar TXT</button>
+              <button onClick={exportAsHtml} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Exportar HTML</button>
+              <button onClick={printConversation} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Imprimir / PDF</button>
+            </div>
+          </div>
           {history.map((msg, idx) => (
             <div key={`${msg.role}-${idx}`} style={{ marginBottom: 12 }}>
               {msg.role === 'user' ? (
