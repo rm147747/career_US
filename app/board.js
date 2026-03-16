@@ -1,9 +1,72 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { listSessions, loadSession, saveSession, deleteSession, renameSession } from './memory';
+
+function renderMarkdown(text) {
+  if (!text) return '';
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Code blocks (``` ... ```)
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre style="background:#1f2937;color:#e5e7eb;padding:1em;border-radius:8px;overflow-x:auto;margin:0.8em 0"><code>${code.trim()}</code></pre>`
+  );
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code style="background:#f3f4f6;padding:0.15em 0.4em;border-radius:4px;font-size:0.9em">$1</code>');
+
+  // Tables
+  html = html.replace(/^(\|.+\|)\n(\|[-:\| ]+\|)\n((?:\|.+\|\n?)+)/gm, (_, header, sep, body) => {
+    const ths = header.split('|').filter(c => c.trim()).map(c => `<th style="border:1px solid #e5e7eb;padding:8px 12px;font-weight:600;background:#f3f4f6">${c.trim()}</th>`).join('');
+    const rows = body.trim().split('\n').map((row, i) => {
+      const tds = row.split('|').filter(c => c.trim()).map(c => `<td style="border:1px solid #e5e7eb;padding:8px 12px">${c.trim()}</td>`).join('');
+      return `<tr style="${i % 2 === 1 ? 'background:#fafafa' : ''}">${tds}</tr>`;
+    }).join('');
+    return `<table style="border-collapse:collapse;width:100%;margin:0.8em 0;font-size:0.92em"><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+
+  // Headers
+  html = html.replace(/^#### (.+)$/gm, '<h4 style="margin:1em 0 0.5em;font-weight:600;font-size:1em;color:#111827">$1</h4>');
+  html = html.replace(/^### (.+)$/gm, '<h3 style="margin:1em 0 0.5em;font-weight:600;font-size:1.1em;color:#111827">$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2 style="margin:1em 0 0.5em;font-weight:600;font-size:1.25em;color:#111827">$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1 style="margin:1em 0 0.5em;font-weight:600;font-size:1.4em;color:#111827">$1</h1>');
+
+  // Bold and italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:600;color:#111827">$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Blockquote
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote style="border-left:3px solid #6366f1;margin:0.8em 0;padding:0.4em 1em;background:#f8f9ff;border-radius:0 6px 6px 0;color:#374151">$1</blockquote>');
+
+  // Horizontal rule
+  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e5e7eb;margin:1em 0">');
+
+  // Unordered lists
+  html = html.replace(/^- (.+)$/gm, '<li style="margin:0.3em 0;line-height:1.6">$1</li>');
+  html = html.replace(/((?:<li[^>]*>.*<\/li>\n?)+)/g, '<ul style="margin:0.5em 0;padding-left:1.5em">$1</ul>');
+
+  // Ordered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin:0.3em 0;line-height:1.6">$1</li>');
+
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#6366f1;text-decoration:none" target="_blank" rel="noopener">$1</a>');
+
+  // Paragraphs (double newline)
+  html = html.replace(/\n\n/g, '</p><p style="margin:0.5em 0;line-height:1.65">');
+
+  // Single newlines to <br>
+  html = html.replace(/\n/g, '<br>');
+
+  return `<p style="margin:0.5em 0;line-height:1.65">${html}</p>`;
+}
+
+function MarkdownContent({ text }) {
+  return <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+}
 
 const defaultAgents = [
   { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6', temperature: 0.3, maxTokens: 1500 },
@@ -675,8 +738,8 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
           {roundResponses.map((item) => (
             <article key={item.displayName} style={cardStyle}>
               <h4 style={cardTitleStyle}>{item.displayName}</h4>
-              <div className="markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.answer}</ReactMarkdown>
+              <div>
+                <MarkdownContent text={item.answer} />
               </div>
             </article>
           ))}
@@ -700,8 +763,8 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
               {msg.role === 'user' ? (
                 <p style={{ fontWeight: 600, color: '#111827' }}>{'Você: '}{msg.content}</p>
               ) : (
-                <div className="markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                <div>
+                  <MarkdownContent text={msg.content} />
                 </div>
               )}
             </div>
