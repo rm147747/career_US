@@ -34,7 +34,7 @@ async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxToken
 
 export async function POST(request) {
   try {
-    const { baseUrl, apiKey, agents, history, temperature, maxTokens, systemPrompt, images } = await request.json();
+    const { baseUrl, apiKey, agents, history, systemPrompt, images } = await request.json();
 
     if (!apiKey || !baseUrl || !Array.isArray(agents) || agents.length !== 6) {
       return NextResponse.json({ error: 'Payload inválido. Verifique API key, base URL e 6 agentes.' }, { status: 400 });
@@ -68,8 +68,8 @@ export async function POST(request) {
         apiKey,
         model: agent.model,
         messages: runningMessages,
-        temperature,
-        maxTokens
+        temperature: agent.temperature ?? 0.4,
+        maxTokens: agent.maxTokens ?? 1500
       });
 
       responses.push({ displayName: agent.displayName, model: agent.model, answer });
