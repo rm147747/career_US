@@ -19,8 +19,18 @@ export async function POST(request) {
 
     // PDF
     if (name.endsWith('.pdf')) {
+      // pdf-parse needs DOM polyfills in serverless
+      if (typeof globalThis.DOMMatrix === 'undefined') {
+        globalThis.DOMMatrix = class DOMMatrix {
+          constructor() { this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0; }
+          isIdentity = true;
+          translate() { return new DOMMatrix(); }
+          scale() { return new DOMMatrix(); }
+          inverse() { return new DOMMatrix(); }
+          multiply() { return new DOMMatrix(); }
+        };
+      }
       const pdfParse = (await import('pdf-parse')).default;
-      // pdf-parse v2 expects a buffer
       const data = await pdfParse(buffer);
       return NextResponse.json({ text: data.text, type: 'pdf', pages: data.numpages });
     }
