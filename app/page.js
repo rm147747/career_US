@@ -69,12 +69,12 @@ function MarkdownContent({ text }) {
 }
 
 const defaultAgents = [
-  { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6', temperature: 0.3, maxTokens: 1500 },
-  { displayName: 'Conselheiro 2 — Perplexity', model: 'perplexity/sonar-pro', temperature: 0.2, maxTokens: 1200 },
-  { displayName: 'Conselheiro 3 — Gemini', model: 'google/gemini-3-pro-preview', temperature: 0.4, maxTokens: 1500 },
-  { displayName: 'Conselheiro 4 — DeepSeek', model: 'deepseek/deepseek-v3.2', temperature: 0.3, maxTokens: 1500 },
-  { displayName: 'Conselheiro 5 — Grok', model: 'x-ai/grok-4.1-fast', temperature: 0.5, maxTokens: 1200 },
-  { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-5.1', temperature: 0.4, maxTokens: 1500 }
+  { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6', temperature: 0.3, maxTokens: 1500, systemPrompt: '' },
+  { displayName: 'Conselheiro 2 — Perplexity', model: 'perplexity/sonar-pro', temperature: 0.2, maxTokens: 1200, systemPrompt: '' },
+  { displayName: 'Conselheiro 3 — Gemini', model: 'google/gemini-3-pro-preview', temperature: 0.4, maxTokens: 1500, systemPrompt: '' },
+  { displayName: 'Conselheiro 4 — DeepSeek', model: 'deepseek/deepseek-v3.2', temperature: 0.3, maxTokens: 1500, systemPrompt: '' },
+  { displayName: 'Conselheiro 5 — Grok', model: 'x-ai/grok-4.1-fast', temperature: 0.5, maxTokens: 1200, systemPrompt: '' },
+  { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-5.1', temperature: 0.4, maxTokens: 1500, systemPrompt: '' }
 ];
 
 function escapeHtml(str) {
@@ -159,7 +159,7 @@ export default function HomePage() {
   const [baseUrl, setBaseUrl] = useState('https://openrouter.ai/api/v1');
   const [apiKey, setApiKey] = useState('');
   const [question, setQuestion] = useState('');
-  const [systemPrompt, setSystemPrompt] = useState('');
+  // systemPrompt removed — each agent now has its own systemPrompt field
   const [agents, setAgents] = useState(defaultAgents);
   const [history, setHistory] = useState([]);
   const [roundResponses, setRoundResponses] = useState([]);
@@ -392,7 +392,8 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
       id: currentSessionId,
       name: sessionName || undefined,
       history,
-      systemPrompt,
+      systemPrompt: '',
+      agents,
     });
     if (!currentSessionId) setCurrentSessionId(id);
     setSessions(listSessions());
@@ -404,7 +405,9 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
     setCurrentSessionId(id);
     setSessionName(session.name);
     setHistory(session.history);
-    setSystemPrompt(session.systemPrompt || '');
+    if (session.agents) {
+      setAgents(session.agents.map((a, i) => ({ ...defaultAgents[i], ...a })));
+    }
     setRoundResponses([]);
     setShowSessions(false);
   }, []);
@@ -490,8 +493,7 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
         body: JSON.stringify({
           baseUrl,
           apiKey,
-          systemPrompt,
-          agents,
+          agents: agents.map((a) => ({ ...a, systemPrompt: a.systemPrompt || '' })),
           history: nextHistory,
           images: imageAttachments,
         })
@@ -588,14 +590,13 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
         <label>Base URL</label>
         <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={inputStyle} />
 
-        <label>{'Prompt Global (instruções para todos os agentes)'}</label>
-        <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Defina o contexto para seus conselheiros..." />
-
         <h4>Conselheiros</h4>
         {agents.map((agent, index) => (
           <div key={agent.displayName} style={{ marginBottom: 14, padding: 12, background: '#fafbfc', borderRadius: 8, border: '1px solid #e5e7eb' }}>
             <label style={{ fontWeight: 600, color: '#374151' }}>{agent.displayName}</label>
             <input value={agent.model} onChange={(e) => updateAgentModel(index, e.target.value)} style={inputStyle} placeholder="modelo" />
+            <label style={{ fontSize: '0.85em', color: '#6b7280' }}>Prompt (instruções específicas)</label>
+            <textarea value={agent.systemPrompt || ''} onChange={(e) => updateAgentField(index, 'systemPrompt', e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', fontSize: '0.9em' }} placeholder={`Instruções para ${agent.displayName}...`} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div>
                 <label style={{ fontSize: '0.85em', color: '#6b7280' }}>Temp.</label>
