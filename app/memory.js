@@ -34,7 +34,7 @@ export function loadSession(id) {
 }
 
 /** Save (create or update) a session. Returns the session id. */
-export function saveSession({ id, name, history, systemPrompt }) {
+export function saveSession({ id, name, history, systemPrompt, agents }) {
   const sessions = readAll();
   const sessionId = id || `session-${Date.now()}`;
   const existing = sessions[sessionId];
@@ -42,6 +42,7 @@ export function saveSession({ id, name, history, systemPrompt }) {
     name: name || existing?.name || `Sessão ${new Date().toLocaleDateString('pt-BR')}`,
     history,
     systemPrompt: systemPrompt || '',
+    agents: agents || existing?.agents || null,
     createdAt: existing?.createdAt || Date.now(),
     updatedAt: Date.now(),
   };

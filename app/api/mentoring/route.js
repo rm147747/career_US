@@ -34,13 +34,11 @@ async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxToken
 
 export async function POST(request) {
   try {
-    const { baseUrl, apiKey, agents, history, systemPrompt, images } = await request.json();
+    const { baseUrl, apiKey, agents, history, images } = await request.json();
 
     if (!apiKey || !baseUrl || !Array.isArray(agents) || agents.length !== 6) {
       return NextResponse.json({ error: 'Payload inválido. Verifique API key, base URL e 6 agentes.' }, { status: 400 });
     }
-
-    const finalPrompt = systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
 
     // Build messages, converting the last user message to multimodal if images are attached
     let processedHistory = [...(history || [])];
@@ -59,21 +57,25 @@ export async function POST(request) {
       }
     }
 
-    const runningMessages = [{ role: 'system', content: finalPrompt }, ...processedHistory];
+    // Shared conversation (without system prompt — each agent gets its own)
+    const sharedMessages = [...processedHistory];
     const responses = [];
 
     for (const agent of agents) {
+      const agentPrompt = agent.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
+      const messages = [{ role: 'system', content: agentPrompt }, ...sharedMessages];
+
       const answer = await callLLM({
         baseUrl,
         apiKey,
         model: agent.model,
-        messages: runningMessages,
+        messages,
         temperature: agent.temperature ?? 0.4,
         maxTokens: agent.maxTokens ?? 1500
       });
 
       responses.push({ displayName: agent.displayName, model: agent.model, answer });
-      runningMessages.push({ role: 'assistant', content: `[${agent.displayName}] ${answer}` });
+      sharedMessages.push({ role: 'assistant', content: `[${agent.displayName}] ${answer}` });
     }
 
     return NextResponse.json({ responses });

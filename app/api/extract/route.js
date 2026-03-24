@@ -30,7 +30,16 @@ export async function POST(request) {
           multiply() { return new DOMMatrix(); }
         };
       }
-      const pdfParse = (await import('pdf-parse')).default;
+      let pdfParse;
+      try {
+        const pdfModule = await import('pdf-parse');
+        pdfParse = typeof pdfModule.default === 'function' ? pdfModule.default : pdfModule;
+      } catch (importErr) {
+        return NextResponse.json({ error: 'Biblioteca pdf-parse não disponível. Verifique a instalação.' }, { status: 500 });
+      }
+      if (typeof pdfParse !== 'function') {
+        return NextResponse.json({ error: 'Falha ao carregar pdf-parse. Reinstale o pacote.' }, { status: 500 });
+      }
       const data = await pdfParse(buffer);
       return NextResponse.json({ text: data.text, type: 'pdf', pages: data.numpages });
     }
