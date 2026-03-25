@@ -24,7 +24,13 @@ async function callLLM({ baseUrl, apiKey, model, messages, temperature, maxToken
     })
   });
 
-  const data = await response.json().catch(() => ({}));
+  const rawText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(`Modelo ${model} retornou resposta inválida (status ${response.status}): ${rawText.slice(0, 200)}`);
+  }
   if (!response.ok) {
     throw new Error(data?.error?.message || `Erro ${response.status} na chamada do modelo ${model}.`);
   }

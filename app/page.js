@@ -499,7 +499,13 @@ h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:
         })
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(`Resposta inválida do servidor: ${rawText.slice(0, 200)}`);
+      }
       if (!response.ok) {
         throw new Error(data.error || 'Falha na rodada.');
       }
