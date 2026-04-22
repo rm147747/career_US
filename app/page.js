@@ -1,868 +1,1029 @@
+// app/page.js
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { listSessions, loadSession, saveSession, deleteSession, renameSession } from './memory';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { COUNCILS, LLMS, getCouncil } from './config/council';
+import { Icon, ArrowRight, ArrowUpRight, ArrowLeft, InfoIcon, CloseIcon, ChatIcon } from './components/Icons';
+import { streamPost } from './lib/sse-client';
+import { renderMarkdown, calculateDivergence, divergenceLabel } from './lib/utils';
 
-function renderMarkdown(text) {
-  if (!text) return '';
-  let html = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+// ═══════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════
 
-  // Code blocks (``` ... ```)
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
-    `<pre style="background:#1f2937;color:#e5e7eb;padding:1em;border-radius:8px;overflow-x:auto;margin:0.8em 0"><code>${code.trim()}</code></pre>`
-  );
+export default function LifeBoard() {
+  const [screen, setScreen] = useState('home'); // 'home' | 'setup' | 'session'
+  const [currentCouncil, setCurrentCouncil] = useState(null);
+  const [counselors, setCounselors] = useState([]); // working copy with role/brief from selected council
+  const [userQuestion, setUserQuestion] = useState('');
 
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code style="background:#f3f4f6;padding:0.15em 0.4em;border-radius:4px;font-size:0.9em">$1</code>');
+  // Session state
+  const [responses, setResponses] = useState([]); // [{ llm, name, role, color, text, citations, isPresident, streaming }]
+  const [currentStep, setCurrentStep] = useState(0);
+  const [sessionError, setSessionError] = useState(null);
+  const [isDone, setIsDone] = useState(false);
 
-  // Tables
-  html = html.replace(/^(\|.+\|)\n(\|[-:\| ]+\|)\n((?:\|.+\|\n?)+)/gm, (_, header, sep, body) => {
-    const ths = header.split('|').filter(c => c.trim()).map(c => `<th style="border:1px solid #e5e7eb;padding:8px 12px;font-weight:600;background:#f3f4f6">${c.trim()}</th>`).join('');
-    const rows = body.trim().split('\n').map((row, i) => {
-      const tds = row.split('|').filter(c => c.trim()).map(c => `<td style="border:1px solid #e5e7eb;padding:8px 12px">${c.trim()}</td>`).join('');
-      return `<tr style="${i % 2 === 1 ? 'background:#fafafa' : ''}">${tds}</tr>`;
-    }).join('');
-    return `<table style="border-collapse:collapse;width:100%;margin:0.8em 0;font-size:0.92em"><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
-  });
+  // Debate modal
+  const [debateAgent, setDebateAgent] = useState(null); // { counselorId, name, role, color, originalResponse }
 
-  // Headers
-  html = html.replace(/^#### (.+)$/gm, '<h4 style="margin:1em 0 0.5em;font-weight:600;font-size:1em;color:#111827">$1</h4>');
-  html = html.replace(/^### (.+)$/gm, '<h3 style="margin:1em 0 0.5em;font-weight:600;font-size:1.1em;color:#111827">$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2 style="margin:1em 0 0.5em;font-weight:600;font-size:1.25em;color:#111827">$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1 style="margin:1em 0 0.5em;font-weight:600;font-size:1.4em;color:#111827">$1</h1>');
+  // Select council → setup
+  const selectCouncil = (id) => {
+    const council = getCouncil(id);
+    setCurrentCouncil(council);
+    setCounselors(
+      LLMS.map((llm) => ({
+        ...llm,
+        role: council.personas[llm.id].role,
+        brief: council.personas[llm.id].brief,
+      }))
+    );
+    setUserQuestion('');
+    setScreen('setup');
+  };
 
-  // Bold and italic
-  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:600;color:#111827">$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  const goHome = () => {
+    setScreen('home');
+    setResponses([]);
+    setCurrentStep(0);
+    setIsDone(false);
+    setSessionError(null);
+  };
 
-  // Blockquote
-  html = html.replace(/^&gt; (.+)$/gm, '<blockquote style="border-left:3px solid #6366f1;margin:0.8em 0;padding:0.4em 1em;background:#f8f9ff;border-radius:0 6px 6px 0;color:#374151">$1</blockquote>');
+  // ═══════════════════════════════════════════════════════
+  // Start session → orchestrate 7 calls (6 counselors + president)
+  // ═══════════════════════════════════════════════════════
 
-  // Horizontal rule
-  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e5e7eb;margin:1em 0">');
+  const startSession = async () => {
+    if (!userQuestion.trim()) return;
+    setScreen('session');
+    setResponses([]);
+    setCurrentStep(0);
+    setIsDone(false);
+    setSessionError(null);
 
-  // Unordered lists
-  html = html.replace(/^- (.+)$/gm, '<li style="margin:0.3em 0;line-height:1.6">$1</li>');
-  html = html.replace(/((?:<li[^>]*>.*<\/li>\n?)+)/g, '<ul style="margin:0.5em 0;padding-left:1.5em">$1</ul>');
+    // Placeholder response objects pra UI mostrar os cards desde já
+    const initial = counselors.map((c) => ({
+      llm: c.id,
+      name: c.name,
+      role: c.role,
+      color: c.color,
+      text: '',
+      citations: null,
+      isPresident: c.isPresident || false,
+      streaming: false,
+      done: false,
+    }));
+    setResponses(initial);
 
-  // Ordered lists
-  html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin:0.3em 0;line-height:1.6">$1</li>');
+    // roda sequencial
+    for (let i = 0; i < counselors.length; i++) {
+      setCurrentStep(i);
+      const c = counselors[i];
 
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#6366f1;text-decoration:none" target="_blank" rel="noopener">$1</a>');
+      setResponses((prev) => {
+        const next = [...prev];
+        next[i] = { ...next[i], streaming: true };
+        return next;
+      });
 
-  // Paragraphs (double newline)
-  html = html.replace(/\n\n/g, '</p><p style="margin:0.5em 0;line-height:1.65">');
+      // priorResponses = textos já finalizados anteriormente
+      const priorResponses = [];
+      for (let j = 0; j < i; j++) {
+        const r = initial[j];
+        priorResponses.push({
+          name: r.name,
+          role: r.role,
+          text: accumulatedText.current[j] || '',
+        });
+      }
 
-  // Single newlines to <br>
-  html = html.replace(/\n/g, '<br>');
-
-  return `<p style="margin:0.5em 0;line-height:1.65">${html}</p>`;
-}
-
-function MarkdownContent({ text }) {
-  return <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
-}
-
-const defaultAgents = [
-  { displayName: 'Conselheiro 1 — Claude', model: 'anthropic/claude-sonnet-4.6', temperature: 0.3, maxTokens: 1500, systemPrompt: '' },
-  { displayName: 'Conselheiro 2 — Perplexity', model: 'perplexity/sonar-pro', temperature: 0.2, maxTokens: 1200, systemPrompt: '' },
-  { displayName: 'Conselheiro 3 — Gemini', model: 'google/gemini-3-pro-preview', temperature: 0.4, maxTokens: 1500, systemPrompt: '' },
-  { displayName: 'Conselheiro 4 — DeepSeek', model: 'deepseek/deepseek-v3.2', temperature: 0.3, maxTokens: 1500, systemPrompt: '' },
-  { displayName: 'Conselheiro 5 — Grok', model: 'x-ai/grok-4.1-fast', temperature: 0.5, maxTokens: 1200, systemPrompt: '' },
-  { displayName: 'Conselheiro 6 — GPT', model: 'openai/gpt-5.1', temperature: 0.4, maxTokens: 1500, systemPrompt: '' }
-];
-
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// --- Style constants (must be before component for SSR) ---
-const inputStyle = {
-  width: '100%',
-  padding: 10,
-  borderRadius: 8,
-  border: '1px solid #ccc',
-  marginTop: 4,
-  marginBottom: 10,
-  boxSizing: 'border-box'
-};
-
-const buttonStyle = {
-  background: '#111827',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 8,
-  padding: '10px 14px',
-  cursor: 'pointer'
-};
-
-const secondaryButtonStyle = {
-  background: '#e5e7eb',
-  color: '#111827',
-  border: 'none',
-  borderRadius: 8,
-  padding: '10px 14px',
-  cursor: 'pointer'
-};
-
-const cardStyle = {
-  marginBottom: 20,
-  padding: 16,
-  background: '#fafbfc',
-  borderRadius: 10,
-  border: '1px solid #e5e7eb'
-};
-
-const attachmentChipStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '4px 10px',
-  background: '#f3f4f6',
-  borderRadius: 8,
-  border: '1px solid #e5e7eb',
-};
-
-const cardTitleStyle = {
-  margin: '0 0 8px 0',
-  fontSize: '1.05em',
-  color: '#6366f1',
-  fontWeight: 600,
-  borderBottom: '2px solid #e5e7eb',
-  paddingBottom: 8
-};
-
-export default function HomePage() {
-  const [baseUrl, setBaseUrl] = useState('https://openrouter.ai/api/v1');
-  const [apiKey, setApiKey] = useState('');
-  const [question, setQuestion] = useState('');
-  // systemPrompt removed — each agent now has its own systemPrompt field
-  const [agents, setAgents] = useState(defaultAgents);
-  const [history, setHistory] = useState([]);
-  const [roundResponses, setRoundResponses] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  // --- Memory / Sessions ---
-  const [currentSessionId, setCurrentSessionId] = useState(null);
-  const [sessions, setSessions] = useState([]);
-  const [showSessions, setShowSessions] = useState(false);
-  const [sessionName, setSessionName] = useState('');
-
-  // --- Attachments ---
-  const [attachments, setAttachments] = useState([]); // { name, type, data, preview? }
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  const ACCEPTED_EXTENSIONS = '.txt,.csv,.md,.json,.pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp';
-
-  const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    setIsProcessing(true);
-    setError('');
-
-    const newAttachments = [];
-    for (const file of files) {
       try {
-        if (IMAGE_TYPES.includes(file.type)) {
-          // Images: convert to base64 for multimodal API
-          const base64 = await fileToBase64(file);
-          newAttachments.push({
-            name: file.name,
-            type: 'image',
-            mimeType: file.type,
-            data: base64,
-            preview: URL.createObjectURL(file),
-          });
-        } else {
-          // Documents: extract text via server
-          const formData = new FormData();
-          formData.append('file', file);
-          const res = await fetch('/api/extract', { method: 'POST', body: formData });
-          const result = await res.json();
-          if (!res.ok) throw new Error(result.error);
-          newAttachments.push({
-            name: file.name,
-            type: 'document',
-            data: result.text,
-            warning: result.warning,
-          });
-        }
+        await streamPost(
+          '/api/council/deliberate',
+          {
+            councilId: currentCouncil.id,
+            counselorId: c.id,
+            userQuestion,
+            priorResponses,
+          },
+          {
+            onDelta: (_delta, full) => {
+              accumulatedText.current[i] = full;
+              setResponses((prev) => {
+                const next = [...prev];
+                next[i] = { ...next[i], text: full };
+                return next;
+              });
+            },
+            onCitations: (citations) => {
+              setResponses((prev) => {
+                const next = [...prev];
+                next[i] = { ...next[i], citations };
+                return next;
+              });
+            },
+            onDone: () => {
+              setResponses((prev) => {
+                const next = [...prev];
+                next[i] = { ...next[i], streaming: false, done: true };
+                return next;
+              });
+            },
+            onError: (err) => {
+              setSessionError(`Erro em ${c.name}: ${err.message}`);
+            },
+          }
+        );
       } catch (err) {
-        setError(`Erro ao processar ${file.name}: ${err.message}`);
-      }
-    }
-    setAttachments((prev) => [...prev, ...newAttachments]);
-    setIsProcessing(false);
-    e.target.value = '';
-  };
-
-  const removeAttachment = (index) => {
-    setAttachments((prev) => {
-      const removed = prev[index];
-      if (removed?.preview) URL.revokeObjectURL(removed.preview);
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
-  // --- Tools ---
-  const [showTools, setShowTools] = useState(false);
-  const [githubUrl, setGithubUrl] = useState('');
-  const [codeInput, setCodeInput] = useState('');
-  const [codeLang, setCodeLang] = useState('python');
-  const [databankQuery, setDatabankQuery] = useState('');
-  const [databankSource, setDatabankSource] = useState('pubmed');
-  const [toolResults, setToolResults] = useState([]); // { label, content }
-  const [toolLoading, setToolLoading] = useState('');
-
-  const fetchGitHub = async () => {
-    if (!githubUrl.trim()) return;
-    setToolLoading('github');
-    try {
-      const res = await fetch('/api/tools/github', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: githubUrl.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setToolResults((prev) => [...prev, { label: `GitHub: ${githubUrl.trim().split('/').slice(-2).join('/')}`, content: data.content }]);
-      setGithubUrl('');
-    } catch (err) {
-      setError(`GitHub: ${err.message}`);
-    }
-    setToolLoading('');
-  };
-
-  const executeCode = async () => {
-    if (!codeInput.trim()) return;
-    setToolLoading('execute');
-    try {
-      const res = await fetch('/api/tools/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: codeInput, language: codeLang }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      const output = data.success
-        ? `Saída:\n${data.stdout}${data.stderr ? `\nStderr:\n${data.stderr}` : ''}`
-        : `Erro:\n${data.stderr || data.error}`;
-      setToolResults((prev) => [...prev, { label: `Código ${codeLang}`, content: `\`\`\`${codeLang}\n${codeInput}\n\`\`\`\n\n${output}` }]);
-      setCodeInput('');
-    } catch (err) {
-      setError(`Execução: ${err.message}`);
-    }
-    setToolLoading('');
-  };
-
-  const queryDatabank = async () => {
-    if (!databankQuery.trim()) return;
-    setToolLoading('databank');
-    try {
-      const res = await fetch('/api/tools/databank', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: databankQuery.trim(), source: databankSource }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      let formatted = `Fonte: ${data.source} | Query: "${data.query}"`;
-      if (data.total) formatted += ` | Total: ${data.total}`;
-      formatted += '\n\n';
-      for (const r of data.results) {
-        if (data.source === 'pubmed') {
-          formatted += `- **${r.title}** (${r.date})\n  ${r.authors}\n  ${r.journal} | ${r.url}\n\n`;
-        } else if (data.source === 'clinicaltrials') {
-          formatted += `- **${r.title}** [${r.nctId}] — ${r.status} (${r.phase})\n  ${r.summary}\n  ${r.url}\n\n`;
-        } else {
-          formatted += `- **${r.title}**\n  ${r.extract || r.snippet || ''}\n  ${r.url}\n\n`;
-        }
-      }
-      setToolResults((prev) => [...prev, { label: `${databankSource}: ${databankQuery.trim().slice(0, 30)}`, content: formatted }]);
-      setDatabankQuery('');
-    } catch (err) {
-      setError(`Databank: ${err.message}`);
-    }
-    setToolLoading('');
-  };
-
-  const removeToolResult = (index) => {
-    setToolResults((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // --- Export ---
-  const buildExportText = useCallback(() => {
-    let text = `Board of Life — ${sessionName || 'Sessão'}\n${'='.repeat(50)}\n\n`;
-    for (const msg of history) {
-      if (msg.role === 'user') {
-        text += `VOCÊ:\n${msg.content}\n\n`;
-      } else {
-        text += `${msg.content}\n\n`;
-      }
-      text += `${'-'.repeat(50)}\n\n`;
-    }
-    return text;
-  }, [history, sessionName]);
-
-  const copyToClipboard = useCallback(() => {
-    navigator.clipboard.writeText(buildExportText());
-  }, [buildExportText]);
-
-  const exportAsText = useCallback(() => {
-    const blob = new Blob([buildExportText()], { type: 'text/plain;charset=utf-8' });
-    downloadBlob(blob, `${sessionName || 'board-of-life'}.txt`);
-  }, [buildExportText, sessionName]);
-
-  const exportAsHtml = useCallback(() => {
-    let html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Board of Life — ${sessionName || 'Sessão'}</title>
-<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#111827}
-.user{font-weight:600;background:#f0f4ff;padding:12px;border-radius:8px;margin:12px 0}
-.agent{padding:12px;border-left:3px solid #6366f1;margin:12px 0;background:#fafbfc;border-radius:0 8px 8px 0}
-h1{color:#6366f1}hr{border:none;border-top:1px solid #e5e7eb;margin:20px 0}</style></head><body>
-<h1>Board of Life</h1><p>${sessionName || 'Sessão exportada'}</p><hr>\n`;
-    for (const msg of history) {
-      if (msg.role === 'user') {
-        html += `<div class="user"><strong>Você:</strong><br>${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
-      } else {
-        html += `<div class="agent">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
-      }
-    }
-    html += '</body></html>';
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    downloadBlob(blob, `${sessionName || 'board-of-life'}.html`);
-  }, [history, sessionName]);
-
-  const printConversation = useCallback(() => {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    let html = `<html><head><title>Board of Life</title>
-<style>body{font-family:system-ui,sans-serif;max-width:700px;margin:20px auto;color:#111827;font-size:12pt}
-.user{font-weight:600;background:#f0f4ff;padding:10px;border-radius:6px;margin:10px 0}
-.agent{padding:10px;border-left:3px solid #6366f1;margin:10px 0;background:#fafbfc}
-h1{font-size:16pt;color:#6366f1}hr{border:none;border-top:1px solid #ccc;margin:15px 0}
-@media print{body{margin:0;font-size:10pt}}</style></head><body>
-<h1>Board of Life</h1><p>${sessionName || 'Sessão'} — ${new Date().toLocaleDateString('pt-BR')}</p><hr>\n`;
-    for (const msg of history) {
-      if (msg.role === 'user') {
-        html += `<div class="user"><strong>Você:</strong><br>${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
-      } else {
-        html += `<div class="agent">${escapeHtml(msg.content).replace(/\n/g, '<br>')}</div>\n`;
-      }
-    }
-    html += '</body></html>';
-    w.document.write(html);
-    w.document.close();
-    w.print();
-  }, [history, sessionName]);
-
-  // Load session list on mount
-  useEffect(() => {
-    setSessions(listSessions());
-  }, []);
-
-  // Auto-save history to current session whenever history changes
-  useEffect(() => {
-    if (history.length === 0) return;
-    const id = saveSession({
-      id: currentSessionId,
-      name: sessionName || undefined,
-      history,
-      systemPrompt: '',
-      agents,
-    });
-    if (!currentSessionId) setCurrentSessionId(id);
-    setSessions(listSessions());
-  }, [history]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleLoadSession = useCallback((id) => {
-    const session = loadSession(id);
-    if (!session) return;
-    setCurrentSessionId(id);
-    setSessionName(session.name);
-    setHistory(session.history);
-    if (session.agents) {
-      setAgents(session.agents.map((a, i) => ({ ...defaultAgents[i], ...a })));
-    }
-    setRoundResponses([]);
-    setShowSessions(false);
-  }, []);
-
-  const handleDeleteSession = useCallback((id) => {
-    deleteSession(id);
-    setSessions(listSessions());
-    if (id === currentSessionId) {
-      setCurrentSessionId(null);
-      setSessionName('');
-      setHistory([]);
-      setRoundResponses([]);
-    }
-  }, [currentSessionId]);
-
-  const handleRenameSession = useCallback((id, newName) => {
-    renameSession(id, newName);
-    setSessions(listSessions());
-    if (id === currentSessionId) setSessionName(newName);
-  }, [currentSessionId]);
-
-  const handleNewSession = useCallback(() => {
-    setCurrentSessionId(null);
-    setSessionName('');
-    setHistory([]);
-    setRoundResponses([]);
-    setQuestion('');
-    setError('');
-  }, []);
-
-  const orderedNames = useMemo(() => agents.map((a) => a.displayName).join(' → '), [agents]);
-
-  const updateAgentModel = (index, model) => {
-    setAgents((prev) => prev.map((agent, i) => (i === index ? { ...agent, model } : agent)));
-  };
-
-  const updateAgentField = (index, field, value) => {
-    setAgents((prev) => prev.map((agent, i) => (i === index ? { ...agent, [field]: value } : agent)));
-  };
-
-  const runRound = async () => {
-    setError('');
-    if (!question.trim()) {
-      setError('Digite uma pergunta antes de iniciar.');
-      return;
-    }
-    if (!apiKey.trim()) {
-      setError('Informe sua API key.');
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Build user message with attachments
-    let userContent = question.trim();
-    const imageAttachments = [];
-    const docTexts = [];
-
-    for (const att of attachments) {
-      if (att.type === 'image') {
-        imageAttachments.push({ mimeType: att.mimeType, base64: att.data, name: att.name });
-      } else {
-        docTexts.push(`\n\n--- Documento anexado: ${att.name} ---\n${att.data}\n--- Fim do documento ---`);
+        setSessionError(`Falha ao consultar ${c.name}: ${err.message}`);
+        setResponses((prev) => {
+          const next = [...prev];
+          next[i] = { ...next[i], streaming: false, done: true, text: next[i].text + '\n\n_[erro: ' + err.message + ']_' };
+          return next;
+        });
+        // Tenta continuar com os próximos mesmo assim
       }
     }
 
-    if (docTexts.length > 0) {
-      userContent += docTexts.join('');
-    }
+    setCurrentStep(counselors.length); // step 8: turno do usuário
+    setIsDone(true);
+  };
 
-    // Append tool results as context
-    for (const tr of toolResults) {
-      userContent += `\n\n--- ${tr.label} ---\n${tr.content}\n--- Fim ---`;
-    }
+  // ref pra textos acumulados (evita closure stale dentro do loop async)
+  const accumulatedText = useRef([]);
+  useEffect(() => { accumulatedText.current = []; }, [userQuestion]);
 
-    const userMessage = { role: 'user', content: userContent };
-    const nextHistory = [...history, userMessage];
+  // ═══════════════════════════════════════════════════════
+  // Follow-up (step 8)
+  // ═══════════════════════════════════════════════════════
 
-    try {
-      const response = await fetch('/api/mentoring', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseUrl,
-          apiKey,
-          agents: agents.map((a) => ({ ...a, systemPrompt: a.systemPrompt || '' })),
-          history: nextHistory,
-          images: imageAttachments,
-        })
-      });
+  const sendFollowup = async ({ question, targetedIds }) => {
+    const targets = targetedIds.length > 0
+      ? counselors.filter((c) => targetedIds.includes(c.id))
+      : counselors;
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Falha na rodada.');
-      }
+    // Append user card
+    const userCard = {
+      llm: '_user',
+      name: 'Você',
+      role: 'Pergunta de aprofundamento',
+      color: 'var(--accent)',
+      text: question,
+      isUser: true,
+      targets: targets.map((t) => t.name),
+      done: true,
+    };
+    setResponses((prev) => [...prev, userCard]);
 
-      const assistantMessages = data.responses.map((item) => ({
-        role: 'assistant',
-        content: `[${item.displayName}] ${item.answer}`
+    // Para cada target, cria card e roda streaming
+    for (const c of targets) {
+      setResponses((prev) => [...prev, {
+        llm: c.id,
+        name: c.name,
+        role: c.role,
+        color: c.color,
+        text: '',
+        streaming: true,
+        done: false,
+      }]);
+
+      // pequena espera pra React re-renderizar
+      await new Promise((r) => setTimeout(r, 50));
+
+      // full history = respostas originais acumuladas
+      const fullHistory = counselors.map((cc, i) => ({
+        name: cc.name,
+        role: cc.role,
+        text: accumulatedText.current[i] || '',
       }));
 
-      setHistory([...nextHistory, ...assistantMessages]);
-      setRoundResponses(data.responses);
-      setQuestion('');
-      setAttachments([]);
-      setToolResults([]);
-    } catch (err) {
-      setError(err.message || 'Erro inesperado.');
-    } finally {
-      setIsLoading(false);
+      try {
+        await streamPost(
+          '/api/council/targeted',
+          {
+            councilId: currentCouncil.id,
+            counselorId: c.id,
+            followUpQuestion: question,
+            fullHistory,
+          },
+          {
+            onDelta: (_delta, full) => {
+              setResponses((prev) => {
+                const next = [...prev];
+                // encontra o último card desse counselor com streaming
+                for (let k = next.length - 1; k >= 0; k--) {
+                  if (next[k].llm === c.id && next[k].streaming) {
+                    next[k] = { ...next[k], text: full };
+                    break;
+                  }
+                }
+                return next;
+              });
+            },
+            onCitations: (citations) => {
+              setResponses((prev) => {
+                const next = [...prev];
+                for (let k = next.length - 1; k >= 0; k--) {
+                  if (next[k].llm === c.id && next[k].streaming) {
+                    next[k] = { ...next[k], citations };
+                    break;
+                  }
+                }
+                return next;
+              });
+            },
+            onDone: () => {
+              setResponses((prev) => {
+                const next = [...prev];
+                for (let k = next.length - 1; k >= 0; k--) {
+                  if (next[k].llm === c.id && next[k].streaming) {
+                    next[k] = { ...next[k], streaming: false, done: true };
+                    break;
+                  }
+                }
+                return next;
+              });
+            },
+          }
+        );
+      } catch (err) {
+        setResponses((prev) => {
+          const next = [...prev];
+          for (let k = next.length - 1; k >= 0; k--) {
+            if (next[k].llm === c.id && next[k].streaming) {
+              next[k] = { ...next[k], streaming: false, done: true, text: `_[erro: ${err.message}]_` };
+              break;
+            }
+          }
+          return next;
+        });
+      }
     }
   };
 
-  const clearConversation = () => {
-    setCurrentSessionId(null);
-    setSessionName('');
-    setHistory([]);
-    setRoundResponses([]);
-    setQuestion('');
-    setError('');
+  // ═══════════════════════════════════════════════════════
+  // Render
+  // ═══════════════════════════════════════════════════════
+
+  return (
+    <>
+      {screen === 'home' && <HomeScreen onSelectCouncil={selectCouncil} />}
+      {screen === 'setup' && currentCouncil && (
+        <SetupScreen
+          council={currentCouncil}
+          counselors={counselors}
+          setCounselors={setCounselors}
+          userQuestion={userQuestion}
+          setUserQuestion={setUserQuestion}
+          onBack={goHome}
+          onStart={startSession}
+        />
+      )}
+      {screen === 'session' && currentCouncil && (
+        <SessionScreen
+          council={currentCouncil}
+          counselors={counselors}
+          userQuestion={userQuestion}
+          responses={responses}
+          currentStep={currentStep}
+          isDone={isDone}
+          error={sessionError}
+          onBack={goHome}
+          onFollowup={sendFollowup}
+          onOpenDebate={(r) => setDebateAgent({ counselorId: r.llm, name: r.name, role: r.role, color: r.color, originalResponse: r.text })}
+        />
+      )}
+
+      {debateAgent && (
+        <DebateModal
+          council={currentCouncil}
+          agent={debateAgent}
+          onClose={() => setDebateAgent(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// HOME SCREEN
+// ═══════════════════════════════════════════════════════════
+
+function HomeScreen({ onSelectCouncil }) {
+  const [filter, setFilter] = useState('');
+  const filtered = useMemo(() => {
+    if (!filter.trim()) return COUNCILS;
+    const q = filter.toLowerCase();
+    return COUNCILS.filter((c) =>
+      c.title.toLowerCase().includes(q) ||
+      c.subtitle.toLowerCase().includes(q) ||
+      c.tagline.toLowerCase().includes(q)
+    );
+  }, [filter]);
+
+  return (
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div className="grid-bg" style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }} />
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(0,229,199,0.08), transparent 60%)' }} />
+
+      {/* NAV */}
+      <nav style={{ position: 'relative', zIndex: 10, borderBottom: '1px solid var(--line)' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--accent)', color: '#001A16', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+            </div>
+            <span className="serif" style={{ fontSize: 24 }}>Life Board</span>
+            <span className="chip" style={{ marginLeft: 8 }}>v3.0 · strategic council</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <span className="hide-mobile" style={{ fontSize: 14, color: 'var(--text-dim)' }}>Sessions</span>
+            <span className="hide-mobile" style={{ fontSize: 14, color: 'var(--text-dim)' }}>Archive</span>
+            <button className="btn-ghost" style={{ fontSize: 14 }}>R · Dr. Brandão</button>
+          </div>
+        </div>
+      </nav>
+
+      {/* HERO */}
+      <section className="hero-glow" style={{ position: 'relative', zIndex: 10, maxWidth: 1400, margin: '0 auto', padding: '80px 32px 56px' }}>
+        <div className="fade-up" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+          <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+          <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--accent)' }}>
+            Deliberative AI · 6 models in sequence
+          </span>
+        </div>
+        <h1 className="serif fade-up" style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)', lineHeight: 1.05, margin: 0, maxWidth: 900, animationDelay: '0.1s' }}>
+          Um conselho de <em className="serif" style={{ color: 'var(--accent)', fontStyle: 'italic' }}>seis mentes</em> para toda decisão que importa.
+        </h1>
+        <p className="fade-up" style={{ marginTop: 24, fontSize: 18, maxWidth: 640, color: 'var(--text-dim)', animationDelay: '0.2s' }}>
+          Claude, Perplexity, Gemini, DeepSeek, Grok e GPT deliberam em sequência. Cada um vê o anterior, constrói em cima, e o GPT preside sintetizando. <em style={{ color: 'var(--text)', fontStyle: 'italic' }}>Você decide.</em>
+        </p>
+        <div className="fade-up" style={{ marginTop: 32, display: 'flex', flexWrap: 'wrap', gap: 8, animationDelay: '0.3s' }}>
+          <span className="chip"><span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)' }} />6 conselheiros LLM</span>
+          <span className="chip">Síntese do presidente</span>
+          <span className="chip">Medidor de divergência</span>
+          <span className="chip">Perguntas dirigidas · debate 1-on-1</span>
+        </div>
+      </section>
+
+      {/* GRID OF COUNCILS */}
+      <section style={{ position: 'relative', zIndex: 10, maxWidth: 1400, margin: '0 auto', padding: '0 32px 96px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--text-faint)' }}>
+              01 — Escolha o conselho
+            </div>
+            <h2 className="serif" style={{ fontSize: 30, marginTop: 8, margin: '8px 0 0' }}>
+              Em que contexto você precisa deliberar?
+            </h2>
+          </div>
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Filtrar conselhos..."
+            style={{ width: 240 }}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+        </div>
+
+        <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onSelectCouncil(c.id)}
+              className="glass glass-hover"
+              style={{ borderRadius: 16, padding: 24, textAlign: 'left', position: 'relative', overflow: 'hidden' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div className="icon-wrap">
+                  <Icon name={c.icon} size={22} />
+                </div>
+                <span className="card-arrow"><ArrowUpRight /></span>
+              </div>
+              <h3 className="serif" style={{ fontSize: 24, marginTop: 20, marginBottom: 0 }}>{c.title}</h3>
+              <p style={{ fontSize: 14, marginTop: 8, color: 'var(--text-dim)' }}>{c.subtitle}</p>
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+                <span className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)' }}>
+                  {c.tagline}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <footer style={{ position: 'relative', zIndex: 10, borderTop: '1px solid var(--line)', padding: '24px 0' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 32px', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-faint)' }}>
+          <span className="mono">LIFE.BOARD — 2026</span>
+          <span className="mono">DECIDER: DR. RAPHAEL BRANDÃO</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SETUP SCREEN
+// ═══════════════════════════════════════════════════════════
+
+function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, onBack, onStart }) {
+  const updateCounselor = (idx, field, value) => {
+    const next = [...counselors];
+    next[idx] = { ...next[idx], [field]: value };
+    setCounselors(next);
+  };
+
+  const restoreDefaults = () => {
+    setCounselors(
+      LLMS.map((llm) => ({
+        ...llm,
+        role: council.personas[llm.id].role,
+        brief: council.personas[llm.id].brief,
+      }))
+    );
   };
 
   return (
-    <main style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
-      <h1>Board of Life</h1>
-      <p style={{ color: '#444' }}>Seus 6 conselheiros, em ordem: {orderedNames}</p>
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div className="grid-bg-fine" style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }} />
 
-      {/* --- Session / Memory Panel --- */}
-      <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <h3 style={{ margin: 0 }}>Memória</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => setShowSessions((v) => !v)} style={secondaryButtonStyle}>
-              {showSessions ? 'Fechar sessões' : `Sessões salvas (${sessions.length})`}
+      <nav style={{ position: 'relative', zIndex: 10, borderBottom: '1px solid var(--line)' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button onClick={onBack} style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)' }}>
+            <ArrowLeft /> Voltar aos conselhos
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>STEP 02</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ width: 24, height: 4, borderRadius: 100, background: 'var(--accent)' }} />
+              <div style={{ width: 24, height: 4, borderRadius: 100, background: 'var(--accent)' }} />
+              <div style={{ width: 24, height: 4, borderRadius: 100, background: 'var(--line-strong)' }} />
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <section style={{ position: 'relative', zIndex: 10, maxWidth: 1400, margin: '0 auto', padding: '48px 32px' }}>
+        <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--accent)' }}>
+          02 — Configure seu board
+        </div>
+        <h2 className="serif" style={{ fontSize: 48, marginTop: 12, margin: '12px 0 0' }}>{council.title}</h2>
+        <p style={{ marginTop: 12, fontSize: 18, color: 'var(--text-dim)', maxWidth: 720 }}>
+          {council.subtitle} · Edite personas, troque conselheiros ou mantenha padrão.
+        </p>
+
+        <div style={{ marginTop: 40, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: 32 }} className="setup-grid">
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 className="serif" style={{ fontSize: 22, margin: 0 }}>
+                Seus conselheiros <span style={{ color: 'var(--text-faint)' }}>· 6 + presidente</span>
+              </h3>
+              <button className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--accent)' }} onClick={restoreDefaults}>
+                Restaurar padrão
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {counselors.map((c, i) => {
+                const isPresident = c.id === 'gpt';
+                return (
+                  <div key={c.id} className="glass" style={{ borderRadius: 12, padding: 16, borderLeft: isPresident ? '2px solid var(--warn)' : undefined }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                      <div className={`counselor-node${isPresident ? ' president' : ''}`}>
+                        {isPresident ? 'P' : i + 1}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.15em', color: c.color }}>
+                            {c.name}
+                          </span>
+                          {isPresident ? (
+                            <span className="chip warn">Presidente · síntese</span>
+                          ) : (
+                            <span className="chip">Conselheiro {i + 1}</span>
+                          )}
+                          <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>{c.model}</span>
+                        </div>
+                        <input
+                          value={c.role}
+                          onChange={(e) => updateCounselor(i, 'role', e.target.value)}
+                          className="input-field"
+                          style={{ marginBottom: 8, fontSize: 16, fontWeight: 500 }}
+                          placeholder="Papel (ex: Mentor Sênior)"
+                        />
+                        <textarea
+                          value={c.brief}
+                          onChange={(e) => updateCounselor(i, 'brief', e.target.value)}
+                          className="input-field"
+                          rows={2}
+                          placeholder="Instruções da persona"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* SIDEBAR */}
+          <aside className="glass" style={{ borderRadius: 16, padding: 24, height: 'fit-content', position: 'sticky', top: 24 }}>
+            <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)' }}>
+              Contexto da sessão
+            </div>
+            <h4 className="serif" style={{ fontSize: 22, marginTop: 8, margin: '8px 0 0' }}>Sua pergunta inicial</h4>
+
+            <textarea
+              value={userQuestion}
+              onChange={(e) => setUserQuestion(e.target.value)}
+              placeholder={council.userQuestion}
+              className="input-field"
+              rows={8}
+              style={{ marginTop: 16 }}
+            />
+
+            <button onClick={onStart} disabled={!userQuestion.trim()} className="btn-primary" style={{ width: '100%', marginTop: 24, padding: '14px 20px' }}>
+              Convocar o conselho <ArrowRight />
             </button>
-            <button onClick={handleNewSession} style={secondaryButtonStyle}>Nova sessão</button>
-          </div>
+
+            <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <InfoIcon />
+              Deliberação leva ~2-4 min em sequência
+            </div>
+          </aside>
         </div>
 
-        <div style={{ marginTop: 10 }}>
-          <label>Nome da sessão atual</label>
-          <input
-            value={sessionName}
-            onChange={(e) => {
-              setSessionName(e.target.value);
-              if (currentSessionId) renameSession(currentSessionId, e.target.value);
-            }}
-            placeholder="Ex.: Planejamento Q1, Carreira EUA..."
-            style={inputStyle}
-          />
-        </div>
-
-        {currentSessionId && (
-          <p style={{ fontSize: '0.85em', color: '#6b7280', margin: 0 }}>
-            Sessão ativa: <strong>{sessionName || currentSessionId}</strong> — {history.length} mensagens (salvamento automático)
-          </p>
-        )}
-
-        {showSessions && (
-          <div style={{ marginTop: 12 }}>
-            {sessions.length === 0 && <p style={{ color: '#9ca3af' }}>Nenhuma sessão salva ainda.</p>}
-            {sessions.map((s) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ flex: 1, fontWeight: s.id === currentSessionId ? 600 : 400 }}>
-                  {s.name} <span style={{ color: '#9ca3af', fontSize: '0.85em' }}>({s.messageCount} msgs — {new Date(s.updatedAt).toLocaleDateString('pt-BR')})</span>
-                </span>
-                <button onClick={() => handleLoadSession(s.id)} style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '0.85em' }}>Carregar</button>
-                <button onClick={() => handleDeleteSession(s.id)} style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '0.85em', color: '#b00020' }}>Excluir</button>
-              </div>
-            ))}
-          </div>
-        )}
+        <style jsx>{`
+          @media (max-width: 1024px) {
+            .setup-grid { grid-template-columns: 1fr !important; }
+          }
+        `}</style>
       </section>
+    </div>
+  );
+}
 
-      <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>{'Configuração'}</h3>
-        <label>API Key</label>
-        <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" style={inputStyle} />
+// ═══════════════════════════════════════════════════════════
+// SESSION SCREEN
+// ═══════════════════════════════════════════════════════════
 
-        <label>Base URL</label>
-        <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={inputStyle} />
+function SessionScreen({ council, counselors, userQuestion, responses, currentStep, isDone, error, onBack, onFollowup, onOpenDebate }) {
+  const originalResponses = responses.slice(0, counselors.length); // primeiros N = deliberação inicial
+  const followupResponses = responses.slice(counselors.length);
 
-        <h4>Conselheiros</h4>
-        {agents.map((agent, index) => (
-          <div key={agent.displayName} style={{ marginBottom: 14, padding: 12, background: '#fafbfc', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-            <label style={{ fontWeight: 600, color: '#374151' }}>{agent.displayName}</label>
-            <input value={agent.model} onChange={(e) => updateAgentModel(index, e.target.value)} style={inputStyle} placeholder="modelo" />
-            <label style={{ fontSize: '0.85em', color: '#6b7280' }}>Prompt (instruções específicas)</label>
-            <textarea value={agent.systemPrompt || ''} onChange={(e) => updateAgentField(index, 'systemPrompt', e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical', fontSize: '0.9em' }} placeholder={`Instruções para ${agent.displayName}...`} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div>
-                <label style={{ fontSize: '0.85em', color: '#6b7280' }}>Temp.</label>
-                <input type="number" min="0" max="2" step="0.1" value={agent.temperature} onChange={(e) => updateAgentField(index, 'temperature', Number(e.target.value))} style={{ ...inputStyle, marginBottom: 0 }} />
+  // Divergence: só calcula após os 6 primeiros (não conta presidente)
+  const divergence = useMemo(() => {
+    const sixInitial = originalResponses
+      .slice(0, 6)
+      .filter((r) => r.done)
+      .map((r) => r.text);
+    if (sixInitial.length < 6) return null;
+    return calculateDivergence(sixInitial);
+  }, [originalResponses]);
+
+  const divLabel = divergence !== null ? divergenceLabel(divergence) : null;
+
+  return (
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div className="grid-bg-fine" style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }} />
+
+      <nav style={{ position: 'relative', zIndex: 10, borderBottom: '1px solid var(--line)' }}>
+        <div style={{ maxWidth: 1600, margin: '0 auto', padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button onClick={onBack} style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)' }}>
+              <ArrowLeft />
+            </button>
+            <div className="divider-v" style={{ height: 20 }} />
+            <div>
+              <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)' }}>
+                {council.title}
               </div>
-              <div>
-                <label style={{ fontSize: '0.85em', color: '#6b7280' }}>Max tokens</label>
-                <input type="number" min="100" max="8000" step="100" value={agent.maxTokens} onChange={(e) => updateAgentField(index, 'maxTokens', Number(e.target.value))} style={{ ...inputStyle, marginBottom: 0 }} />
-              </div>
+              <div className="serif" style={{ fontSize: 18 }}>{isDone ? 'Deliberação concluída · sua vez' : 'Deliberação em andamento'}</div>
             </div>
           </div>
-        ))}
-      </section>
-
-      {/* --- Tools Panel --- */}
-      <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, border: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3 style={{ margin: 0 }}>Ferramentas</h3>
-          <button onClick={() => setShowTools((v) => !v)} style={secondaryButtonStyle}>
-            {showTools ? 'Fechar' : 'Abrir ferramentas'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {!isDone && <span className="chip active"><span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />Deliberando</span>}
+            {isDone && <span className="chip warn">Sua decisão</span>}
+          </div>
         </div>
+      </nav>
 
-        {showTools && (
-          <div style={{ marginTop: 12 }}>
-            {/* GitHub */}
-            <div style={{ marginBottom: 16, padding: 12, background: '#fafbfc', borderRadius: 8 }}>
-              <h4 style={{ margin: '0 0 8px', color: '#6366f1' }}>GitHub — Buscar arquivo</h4>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} placeholder="https://github.com/user/repo/blob/main/file.py" style={{ ...inputStyle, flex: 1, marginBottom: 0 }} />
-                <button onClick={fetchGitHub} disabled={toolLoading === 'github'} style={{ ...buttonStyle, whiteSpace: 'nowrap' }}>
-                  {toolLoading === 'github' ? 'Buscando...' : 'Buscar'}
-                </button>
-              </div>
-            </div>
-
-            {/* Code execution */}
-            <div style={{ marginBottom: 16, padding: 12, background: '#fafbfc', borderRadius: 8 }}>
-              <h4 style={{ margin: '0 0 8px', color: '#6366f1' }}>Executar código</h4>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <select value={codeLang} onChange={(e) => setCodeLang(e.target.value)} style={{ ...inputStyle, width: 'auto', marginBottom: 0 }}>
-                  <option value="python">Python</option>
-                  <option value="r">R</option>
-                </select>
-                <button onClick={executeCode} disabled={toolLoading === 'execute'} style={buttonStyle}>
-                  {toolLoading === 'execute' ? 'Executando...' : 'Executar'}
-                </button>
-              </div>
-              <textarea value={codeInput} onChange={(e) => setCodeInput(e.target.value)} rows={5} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.9em', marginBottom: 0 }} placeholder="print('Hello World')" />
-            </div>
-
-            {/* Databank */}
-            <div style={{ padding: 12, background: '#fafbfc', borderRadius: 8 }}>
-              <h4 style={{ margin: '0 0 8px', color: '#6366f1' }}>Bancos de dados públicos</h4>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <select value={databankSource} onChange={(e) => setDatabankSource(e.target.value)} style={{ ...inputStyle, width: 'auto', marginBottom: 0 }}>
-                  <option value="pubmed">PubMed</option>
-                  <option value="clinicaltrials">ClinicalTrials.gov</option>
-                  <option value="wikipedia">Wikipedia</option>
-                </select>
-                <input value={databankQuery} onChange={(e) => setDatabankQuery(e.target.value)} placeholder="Ex.: oncology immunotherapy" style={{ ...inputStyle, flex: 1, marginBottom: 0 }} />
-                <button onClick={queryDatabank} disabled={toolLoading === 'databank'} style={buttonStyle}>
-                  {toolLoading === 'databank' ? 'Buscando...' : 'Pesquisar'}
-                </button>
-              </div>
-            </div>
+      {error && (
+        <div style={{ position: 'relative', zIndex: 10, maxWidth: 1600, margin: '12px auto 0', padding: '0 32px' }}>
+          <div className="glass" style={{ borderRadius: 12, padding: 12, borderColor: 'rgba(255,92,122,0.3)', background: 'rgba(255,92,122,0.05)' }}>
+            <span style={{ fontSize: 13, color: 'var(--danger)' }}>⚠ {error}</span>
           </div>
-        )}
-
-        {/* Tool results chips */}
-        {toolResults.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <p style={{ fontSize: '0.85em', color: '#6b7280', margin: '0 0 6px' }}>Contexto coletado (será incluído na próxima consulta):</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {toolResults.map((tr, idx) => (
-                <div key={`tr-${idx}`} style={{ ...attachmentChipStyle, background: '#eef2ff' }}>
-                  <span style={{ fontSize: '0.82em' }}>{tr.label}</span>
-                  <button onClick={() => removeToolResult(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b00020', fontWeight: 700, padding: '0 2px' }}>×</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <h3>{'Sua questão para o Board'}</h3>
-        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Pergunte aos seus 6 conselheiros..." />
-
-        {/* File attachments */}
-        <div style={{ marginTop: 4, marginBottom: 8 }}>
-          <label htmlFor="file-upload" style={{ ...secondaryButtonStyle, display: 'inline-block', cursor: 'pointer', fontSize: '0.9em', padding: '6px 12px' }}>
-            {isProcessing ? 'Processando...' : 'Anexar arquivos'}
-          </label>
-          <input
-            id="file-upload"
-            type="file"
-            multiple
-            accept={ACCEPTED_EXTENSIONS}
-            onChange={handleFileSelect}
-            disabled={isProcessing || isLoading}
-            style={{ display: 'none' }}
-          />
-          <span style={{ marginLeft: 8, fontSize: '0.8em', color: '#9ca3af' }}>
-            PDF, DOCX, TXT, CSV, MD, JPG, PNG, GIF, WEBP
-          </span>
         </div>
-
-        {attachments.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-            {attachments.map((att, idx) => (
-              <div key={`${att.name}-${idx}`} style={attachmentChipStyle}>
-                {att.type === 'image' && att.preview && (
-                  <img src={att.preview} alt={att.name} style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: 4 }} />
-                )}
-                <span style={{ fontSize: '0.85em', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {att.name}
-                </span>
-                <button onClick={() => removeAttachment(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b00020', fontWeight: 700, fontSize: '1em', padding: '0 2px' }}>
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <button disabled={isLoading || isProcessing} onClick={runRound} style={buttonStyle}>
-            {isLoading ? 'Consultando o Board...' : 'Consultar o Board'}
-          </button>
-          <button disabled={isLoading} onClick={clearConversation} style={secondaryButtonStyle}>Limpar conversa</button>
-        </div>
-
-        {error && <p style={{ color: '#b00020', marginTop: 8 }}>{error}</p>}
-      </section>
-
-      {roundResponses.length > 0 && (
-        <section style={{ background: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <h3>Pareceres do Board</h3>
-          {roundResponses.map((item) => (
-            <article key={item.displayName} style={cardStyle}>
-              <h4 style={cardTitleStyle}>{item.displayName}</h4>
-              <div>
-                <MarkdownContent text={item.answer} />
-              </div>
-            </article>
-          ))}
-          <p><strong>Todos os conselheiros se pronunciaram.</strong> A palavra é sua.</p>
-        </section>
       )}
 
-      {history.length > 0 && (
-        <section style={{ background: '#fff', borderRadius: 12, padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-            <h3 style={{ margin: 0 }}>{'Histórico'}</h3>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button onClick={copyToClipboard} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Copiar tudo</button>
-              <button onClick={exportAsText} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Exportar TXT</button>
-              <button onClick={exportAsHtml} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Exportar HTML</button>
-              <button onClick={printConversation} style={{ ...secondaryButtonStyle, padding: '6px 10px', fontSize: '0.85em' }}>Imprimir / PDF</button>
-            </div>
+      <section style={{ position: 'relative', zIndex: 10, maxWidth: 1600, margin: '0 auto', padding: '40px 32px', display: 'grid', gridTemplateColumns: '260px 1fr', gap: 40 }} className="session-grid">
+        {/* TIMELINE */}
+        <aside style={{ position: 'sticky', top: 24, height: 'fit-content' }} className="hide-mobile">
+          <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 20 }}>
+            Timeline
           </div>
-          {history.map((msg, idx) => (
-            <div key={`${msg.role}-${idx}`} style={{ marginBottom: 12 }}>
-              {msg.role === 'user' ? (
-                <p style={{ fontWeight: 600, color: '#111827' }}>{'Você: '}{msg.content}</p>
-              ) : (
-                <div>
-                  <MarkdownContent text={msg.content} />
-                </div>
-              )}
-            </div>
-          ))}
-        </section>
-      )}
+          <Timeline counselors={counselors} currentStep={currentStep} isDone={isDone} />
 
-      <style>{`
-        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
-          margin-top: 1em;
-          margin-bottom: 0.5em;
-          font-weight: 600;
-          line-height: 1.3;
-          color: #111827;
-        }
-        .markdown-body h1 { font-size: 1.4em; }
-        .markdown-body h2 { font-size: 1.25em; }
-        .markdown-body h3 { font-size: 1.1em; }
-        .markdown-body h4 { font-size: 1em; }
-        .markdown-body p {
-          margin: 0.5em 0;
-          line-height: 1.65;
-        }
-        .markdown-body ul, .markdown-body ol {
-          margin: 0.5em 0;
-          padding-left: 1.5em;
-        }
-        .markdown-body li {
-          margin: 0.3em 0;
-          line-height: 1.6;
-        }
-        .markdown-body strong {
-          font-weight: 600;
-          color: #111827;
-        }
-        .markdown-body hr {
-          border: none;
-          border-top: 1px solid #e5e7eb;
-          margin: 1em 0;
-        }
-        .markdown-body blockquote {
-          border-left: 3px solid #6366f1;
-          margin: 0.8em 0;
-          padding: 0.4em 1em;
-          background: #f8f9ff;
-          border-radius: 0 6px 6px 0;
-          color: #374151;
-        }
-        .markdown-body code {
-          background: #f3f4f6;
-          padding: 0.15em 0.4em;
-          border-radius: 4px;
-          font-size: 0.9em;
-          font-family: 'Geist Mono', 'SF Mono', Consolas, monospace;
-        }
-        .markdown-body pre {
-          background: #1f2937;
-          color: #e5e7eb;
-          padding: 1em;
-          border-radius: 8px;
-          overflow-x: auto;
-          margin: 0.8em 0;
-        }
-        .markdown-body pre code {
-          background: none;
-          padding: 0;
-          color: inherit;
-        }
-        .markdown-body table {
-          border-collapse: collapse;
-          width: 100%;
-          margin: 0.8em 0;
-          font-size: 0.92em;
-        }
-        .markdown-body thead {
-          background: #f3f4f6;
-        }
-        .markdown-body th, .markdown-body td {
-          border: 1px solid #e5e7eb;
-          padding: 8px 12px;
-          text-align: left;
-        }
-        .markdown-body th {
-          font-weight: 600;
-          color: #111827;
-        }
-        .markdown-body tr:nth-child(even) {
-          background: #fafafa;
-        }
-        .markdown-body a {
-          color: #6366f1;
-          text-decoration: none;
-        }
-        .markdown-body a:hover {
-          text-decoration: underline;
+          {/* DIVERGENCE METER */}
+          {divergence !== null && (
+            <div className="glass" style={{ marginTop: 24, padding: 16, borderRadius: 12 }}>
+              <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 10 }}>
+                Divergência
+              </div>
+              <div className="divergence-track">
+                <div className="divergence-fill" style={{ width: `${divergence}%` }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{divLabel.label}</span>
+                <span className="mono" style={{ fontSize: 13, color: 'var(--accent)' }}>{divergence}%</span>
+              </div>
+              <p style={{ fontSize: 11, marginTop: 6, color: 'var(--text-dim)', margin: '6px 0 0' }}>{divLabel.desc}</p>
+            </div>
+          )}
+        </aside>
+
+        {/* FEED */}
+        <main style={{ minWidth: 0 }}>
+          {/* User question */}
+          <div className="glass fade-up" style={{ borderRadius: 16, padding: 24, marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <div className="counselor-node" style={{ width: 28, height: 28, fontSize: 10 }}>R</div>
+              <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)' }}>
+                Pergunta de Raphael · decisor
+              </div>
+            </div>
+            <p style={{ fontSize: 16, lineHeight: 1.6, margin: 0, color: 'var(--text)' }}>{userQuestion}</p>
+          </div>
+
+          {/* Deliberation cards */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {responses.map((r, i) => (
+              <ResponseCard
+                key={i}
+                index={i}
+                response={r}
+                onOpenDebate={onOpenDebate}
+              />
+            ))}
+          </div>
+
+          {/* User turn */}
+          {isDone && (
+            <UserTurn
+              counselors={counselors}
+              onSend={onFollowup}
+              onEnd={onBack}
+            />
+          )}
+        </main>
+      </section>
+
+      <style jsx>{`
+        @media (max-width: 1024px) {
+          .session-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
-    </main>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIMELINE
+// ═══════════════════════════════════════════════════════════
+
+function Timeline({ counselors, currentStep, isDone }) {
+  const steps = [
+    ...counselors.slice(0, 6).map((c, i) => ({
+      num: String(i + 1).padStart(2, '0'),
+      label: c.name,
+      role: c.role,
+      type: 'counselor',
+      idx: i,
+    })),
+    { num: '07', label: 'GPT', role: 'Presidente · síntese', type: 'president', idx: 6 },
+    { num: '08', label: 'Você', role: 'Decisão ou aprofundar', type: 'user', idx: 7 },
+  ];
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {steps.map((s, i) => {
+        const isUserStep = s.type === 'user';
+        const isCurrentUser = isUserStep && isDone;
+        const status =
+          currentStep > s.idx || isCurrentUser ? 'done' :
+          currentStep === s.idx ? 'active' : '';
+        const nodeClass = `counselor-node ${status} ${s.type === 'president' ? 'president' : ''}`.trim();
+        return (
+          <div key={i} style={{ position: 'relative', display: 'flex', gap: 16 }}>
+            {i < steps.length - 1 && <div className="timeline-line" />}
+            <div className={nodeClass}>{s.num}</div>
+            <div style={{ minWidth: 0, paddingTop: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: status ? 'var(--text)' : 'var(--text-dim)' }}>{s.label}</div>
+              <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--text-faint)', marginTop: 2 }}>
+                {s.role}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESPONSE CARD
+// ═══════════════════════════════════════════════════════════
+
+function ResponseCard({ index, response: r, onOpenDebate }) {
+  const isPresident = r.isPresident;
+  const isUser = r.isUser;
+
+  if (isUser) {
+    return (
+      <article className="glass fade-up" style={{ borderRadius: 16, padding: 24, background: 'linear-gradient(180deg, rgba(0,229,199,0.04), rgba(255,255,255,0.01))', borderColor: 'rgba(0,229,199,0.2)' }}>
+        <header style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div className="counselor-node done" style={{ width: 32, height: 32, fontSize: 10 }}>R</div>
+          <div>
+            <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--accent)' }}>
+              Raphael · decisor
+            </div>
+            <div className="serif" style={{ fontSize: 18 }}>{r.role}</div>
+          </div>
+        </header>
+        <div style={{ fontSize: 16, color: 'var(--text)' }}>{r.text}</div>
+        {r.targets && r.targets.length > 0 && (
+          <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {r.targets.map((t) => (
+              <span key={t} className="chip active">→ {t}</span>
+            ))}
+          </div>
+        )}
+      </article>
+    );
+  }
+
+  return (
+    <article
+      className="glass fade-up"
+      style={{
+        borderRadius: 16,
+        padding: 24,
+        ...(isPresident
+          ? {
+              borderColor: 'rgba(255,181,71,0.3)',
+              background: 'linear-gradient(180deg, rgba(255,181,71,0.04), rgba(255,255,255,0.01))',
+            }
+          : {}),
+      }}
+    >
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className={`counselor-node ${r.done ? 'done' : r.streaming ? 'active' : ''} ${isPresident ? 'president' : ''}`}>
+            {isPresident ? 'P' : String(index + 1).padStart(2, '0')}
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: r.color }}>
+                {r.name}
+              </span>
+              {isPresident && <span className="chip warn">Síntese</span>}
+              {r.streaming && (
+                <span className="typing">
+                  <span /><span /><span />
+                </span>
+              )}
+            </div>
+            <div className="serif" style={{ fontSize: 18, marginTop: 2 }}>{r.role}</div>
+          </div>
+        </div>
+        {r.done && !isPresident && (
+          <button onClick={() => onOpenDebate(r)} className="btn-ghost" style={{ fontSize: 12, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ChatIcon size={12} /> Debater 1-on-1
+          </button>
+        )}
+      </header>
+
+      <div
+        className="markdown-body"
+        style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text)' }}
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(r.text) || (r.streaming ? '' : '<em style="color:var(--text-faint)">aguardando...</em>') }}
+      />
+
+      {r.citations && r.citations.length > 0 && (
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+          <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 8 }}>
+            Fontes · {r.citations.length}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {r.citations.map((c, k) => {
+              const url = typeof c === 'string' ? c : c.url || c.href;
+              if (!url) return null;
+              let domain;
+              try { domain = new URL(url).hostname.replace('www.', ''); } catch { domain = url.slice(0, 30); }
+              return (
+                <a key={k} href={url} target="_blank" rel="noopener noreferrer" className="citation-link">
+                  [{k + 1}] {domain}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// USER TURN (step 8)
+// ═══════════════════════════════════════════════════════════
+
+function UserTurn({ counselors, onSend, onEnd }) {
+  const [question, setQuestion] = useState('');
+  const [targets, setTargets] = useState(new Set());
+
+  const toggle = (id) => {
+    setTargets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const submit = () => {
+    if (!question.trim()) return;
+    onSend({ question, targetedIds: Array.from(targets) });
+    setQuestion('');
+    setTargets(new Set());
+  };
+
+  return (
+    <div className="glass fade-up" style={{ marginTop: 40, borderRadius: 16, padding: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--accent)', marginBottom: 4 }}>
+            08 · Sua vez · você decide
+          </div>
+          <div className="serif" style={{ fontSize: 20 }}>Aprofunde, questione — ou encerre com sua decisão</div>
+        </div>
+        <button onClick={onEnd} className="btn-ghost" style={{ fontSize: 12 }}>Encerrar e decidir</button>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 8 }}>
+          Direcione a pergunta (opcional)
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {counselors.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => toggle(c.id)}
+              className={`chip${targets.has(c.id) ? ' active' : ''}`}
+              style={{ cursor: 'pointer' }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color }} />
+              {c.name} <span style={{ color: 'var(--text-faint)' }}>· {c.role}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <textarea
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+        placeholder="Faça uma pergunta de aprofundamento ao board todo, ou selecione conselheiros acima..."
+        className="input-field"
+        rows={4}
+      />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+          Sem seleção = todo o board responde · Com seleção = apenas conselheiros marcados
+        </span>
+        <button onClick={submit} disabled={!question.trim()} className="btn-primary" style={{ fontSize: 14 }}>
+          Enviar pergunta <ArrowRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEBATE MODAL (1-on-1)
+// ═══════════════════════════════════════════════════════════
+
+function DebateModal({ council, agent, onClose }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const feedRef = useRef(null);
+
+  useEffect(() => {
+    // Mensagem de abertura
+    setMessages([
+      {
+        role: 'assistant',
+        content: `Olá. Minha contribuição original como ${agent.role}: "${(agent.originalResponse || '').slice(0, 180)}${agent.originalResponse?.length > 180 ? '…' : ''}"\n\nO que você quer aprofundar?`,
+      },
+    ]);
+  }, [agent]);
+
+  useEffect(() => {
+    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+  }, [messages]);
+
+  const send = async () => {
+    const userMsg = input.trim();
+    if (!userMsg || isStreaming) return;
+    setInput('');
+
+    const newHistory = [...messages, { role: 'user', content: userMsg }];
+    setMessages([...newHistory, { role: 'assistant', content: '', streaming: true }]);
+    setIsStreaming(true);
+
+    try {
+      let fullText = '';
+      await streamPost(
+        '/api/council/debate',
+        {
+          councilId: council.id,
+          counselorId: agent.counselorId,
+          originalResponse: agent.originalResponse,
+          chatHistory: messages.slice(1), // exclui abertura
+          userMessage: userMsg,
+        },
+        {
+          onDelta: (_delta, full) => {
+            fullText = full;
+            setMessages([...newHistory, { role: 'assistant', content: full, streaming: true }]);
+          },
+          onDone: () => {
+            setMessages([...newHistory, { role: 'assistant', content: fullText, streaming: false }]);
+          },
+          onError: (err) => {
+            setMessages([...newHistory, { role: 'assistant', content: `_[erro: ${err.message}]_`, streaming: false }]);
+          },
+        }
+      );
+    } catch (err) {
+      setMessages([...newHistory, { role: 'assistant', content: `_[erro: ${err.message}]_`, streaming: false }]);
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="glass" style={{ borderRadius: 20, width: '100%', maxWidth: 640, padding: 24, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: agent.color }}>
+              Debate 1-on-1 · {agent.name}
+            </div>
+            <h3 className="serif" style={{ fontSize: 22, margin: '4px 0 0' }}>{agent.role}</h3>
+          </div>
+          <button onClick={onClose} className="btn-ghost" style={{ padding: 8 }}><CloseIcon /></button>
+        </header>
+
+        <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', padding: '4px 4px 16px', minHeight: 200, maxHeight: '55vh', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              <div
+                className={m.role === 'assistant' ? 'markdown-body' : ''}
+                style={{
+                  maxWidth: '85%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  background: m.role === 'user' ? 'rgba(0,229,199,0.12)' : 'rgba(255,255,255,0.04)',
+                  border: m.role === 'user' ? '1px solid rgba(0,229,199,0.3)' : '1px solid var(--line)',
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: m.role === 'assistant' ? renderMarkdown(m.content) || (m.streaming ? '<span class="typing"><span></span><span></span><span></span></span>' : '') : m.content,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && send()}
+            placeholder="Contra-argumente, aprofunde, peça exemplos..."
+            className="input-field"
+            disabled={isStreaming}
+          />
+          <button onClick={send} disabled={!input.trim() || isStreaming} className="btn-primary" style={{ padding: '10px 16px' }}>
+            {isStreaming ? '...' : 'Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
