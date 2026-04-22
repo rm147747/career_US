@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { COUNCILS, LLMS, getCouncil } from './config/council';
 import { Icon, ArrowRight, ArrowUpRight, ArrowLeft, InfoIcon, CloseIcon, ChatIcon } from './components/Icons';
+import { AttachmentUploader, buildAttachmentsBlock } from './components/AttachmentUploader';
 import { streamPost } from './lib/sse-client';
 import { renderMarkdown, calculateDivergence, divergenceLabel } from './lib/utils';
 
@@ -16,6 +17,7 @@ export default function LifeBoard() {
   const [currentCouncil, setCurrentCouncil] = useState(null);
   const [counselors, setCounselors] = useState([]); // working copy with role/brief from selected council
   const [userQuestion, setUserQuestion] = useState('');
+  const [setupAttachments, setSetupAttachments] = useState([]); // anexos da pergunta inicial
 
   // Session state
   const [responses, setResponses] = useState([]); // [{ llm, name, role, color, text, citations, isPresident, streaming }]
@@ -38,6 +40,7 @@ export default function LifeBoard() {
       }))
     );
     setUserQuestion('');
+    setSetupAttachments([]);
     setScreen('setup');
   };
 
@@ -55,11 +58,20 @@ export default function LifeBoard() {
 
   const startSession = async () => {
     if (!userQuestion.trim()) return;
+    // Se ainda tem anexo processando, aborta
+    if (setupAttachments.some((a) => a.status === 'processing')) {
+      alert('Aguarde a extração dos anexos antes de convocar o board.');
+      return;
+    }
     setScreen('session');
     setResponses([]);
     setCurrentStep(0);
     setIsDone(false);
     setSessionError(null);
+
+    // Pergunta final = texto do usuário + bloco de anexos
+    const attachmentsBlock = buildAttachmentsBlock(setupAttachments);
+    const enrichedQuestion = userQuestion + attachmentsBlock;
 
     // Placeholder response objects pra UI mostrar os cards desde já
     const initial = counselors.map((c) => ({
@@ -103,7 +115,7 @@ export default function LifeBoard() {
           {
             councilId: currentCouncil.id,
             counselorId: c.id,
-            userQuestion,
+            userQuestion: enrichedQuestion,
             priorResponses,
           },
           {
@@ -157,10 +169,13 @@ export default function LifeBoard() {
   // Follow-up (step 8)
   // ═══════════════════════════════════════════════════════
 
-  const sendFollowup = async ({ question, targetedIds }) => {
+  const sendFollowup = async ({ question, targetedIds, attachments = [] }) => {
     const targets = targetedIds.length > 0
       ? counselors.filter((c) => targetedIds.includes(c.id))
       : counselors;
+
+    const attachmentsBlock = buildAttachmentsBlock(attachments);
+    const enrichedQuestion = question + attachmentsBlock;
 
     // Append user card
     const userCard = {
@@ -171,6 +186,7 @@ export default function LifeBoard() {
       text: question,
       isUser: true,
       targets: targets.map((t) => t.name),
+      attachments: attachments.filter((a) => a.status === 'done').map((a) => a.name),
       done: true,
     };
     setResponses((prev) => [...prev, userCard]);
@@ -203,7 +219,7 @@ export default function LifeBoard() {
           {
             councilId: currentCouncil.id,
             counselorId: c.id,
-            followUpQuestion: question,
+            followUpQuestion: enrichedQuestion,
             fullHistory,
           },
           {
@@ -275,6 +291,8 @@ export default function LifeBoard() {
           setCounselors={setCounselors}
           userQuestion={userQuestion}
           setUserQuestion={setUserQuestion}
+          attachments={setupAttachments}
+          setAttachments={setSetupAttachments}
           onBack={goHome}
           onStart={startSession}
         />
@@ -429,7 +447,7 @@ function HomeScreen({ onSelectCouncil }) {
 // SETUP SCREEN
 // ═══════════════════════════════════════════════════════════
 
-function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, onBack, onStart }) {
+function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, attachments, setAttachments, onBack, onStart }) {
   const updateCounselor = (idx, field, value) => {
     const next = [...counselors];
     next[idx] = { ...next[idx], [field]: value };
@@ -544,7 +562,19 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
               style={{ marginTop: 16 }}
             />
 
-            <button onClick={onStart} disabled={!userQuestion.trim()} className="btn-primary" style={{ width: '100%', marginTop: 24, padding: '14px 20px' }}>
+            <div style={{ marginTop: 16 }}>
+              <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 8 }}>
+                Anexos (opcional)
+              </div>
+              <AttachmentUploader attachments={attachments} setAttachments={setAttachments} />
+            </div>
+
+            <button
+              onClick={onStart}
+              disabled={!userQuestion.trim() || attachments.some((a) => a.status === 'processing')}
+              className="btn-primary"
+              style={{ width: '100%', marginTop: 24, padding: '14px 20px' }}
+            >
               Convocar o conselho <ArrowRight />
             </button>
 
@@ -753,6 +783,15 @@ function ResponseCard({ index, response: r, onOpenDebate }) {
           </div>
         </header>
         <div style={{ fontSize: 16, color: 'var(--text)' }}>{r.text}</div>
+        {r.attachments && r.attachments.length > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {r.attachments.map((a) => (
+              <span key={a} className="chip" style={{ borderColor: 'var(--line-strong)' }}>
+                📎 {a}
+              </span>
+            ))}
+          </div>
+        )}
         {r.targets && r.targets.length > 0 && (
           <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {r.targets.map((t) => (
@@ -842,6 +881,7 @@ function ResponseCard({ index, response: r, onOpenDebate }) {
 function UserTurn({ counselors, onSend, onEnd }) {
   const [question, setQuestion] = useState('');
   const [targets, setTargets] = useState(new Set());
+  const [attachments, setAttachments] = useState([]);
 
   const toggle = (id) => {
     setTargets((prev) => {
@@ -854,10 +894,17 @@ function UserTurn({ counselors, onSend, onEnd }) {
 
   const submit = () => {
     if (!question.trim()) return;
-    onSend({ question, targetedIds: Array.from(targets) });
+    if (attachments.some((a) => a.status === 'processing')) {
+      alert('Aguarde a extração dos anexos.');
+      return;
+    }
+    onSend({ question, targetedIds: Array.from(targets), attachments });
     setQuestion('');
     setTargets(new Set());
+    setAttachments([]);
   };
+
+  const processing = attachments.some((a) => a.status === 'processing');
 
   return (
     <div className="glass fade-up" style={{ marginTop: 40, borderRadius: 16, padding: 24 }}>
@@ -898,11 +945,15 @@ function UserTurn({ counselors, onSend, onEnd }) {
         rows={4}
       />
 
+      <div style={{ marginTop: 12 }}>
+        <AttachmentUploader attachments={attachments} setAttachments={setAttachments} />
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, flexWrap: 'wrap', gap: 8 }}>
         <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>
           Sem seleção = todo o board responde · Com seleção = apenas conselheiros marcados
         </span>
-        <button onClick={submit} disabled={!question.trim()} className="btn-primary" style={{ fontSize: 14 }}>
+        <button onClick={submit} disabled={!question.trim() || processing} className="btn-primary" style={{ fontSize: 14 }}>
           Enviar pergunta <ArrowRight size={14} />
         </button>
       </div>
@@ -918,6 +969,7 @@ function DebateModal({ council, agent, onClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [attachments, setAttachments] = useState([]);
   const feedRef = useRef(null);
 
   useEffect(() => {
@@ -937,11 +989,22 @@ function DebateModal({ council, agent, onClose }) {
   const send = async () => {
     const userMsg = input.trim();
     if (!userMsg || isStreaming) return;
+    if (attachments.some((a) => a.status === 'processing')) {
+      alert('Aguarde a extração dos anexos.');
+      return;
+    }
     setInput('');
 
-    const newHistory = [...messages, { role: 'user', content: userMsg }];
+    const attachmentsBlock = buildAttachmentsBlock(attachments);
+    const enrichedMsg = userMsg + attachmentsBlock;
+    const visibleUserMsg = userMsg + (attachments.filter((a) => a.status === 'done').length > 0
+      ? '\n\n📎 ' + attachments.filter((a) => a.status === 'done').map((a) => a.name).join(' · ')
+      : '');
+
+    const newHistory = [...messages, { role: 'user', content: visibleUserMsg }];
     setMessages([...newHistory, { role: 'assistant', content: '', streaming: true }]);
     setIsStreaming(true);
+    setAttachments([]);
 
     try {
       let fullText = '';
@@ -952,7 +1015,7 @@ function DebateModal({ council, agent, onClose }) {
           counselorId: agent.counselorId,
           originalResponse: agent.originalResponse,
           chatHistory: messages.slice(1), // exclui abertura
-          userMessage: userMsg,
+          userMessage: enrichedMsg,
         },
         {
           onDelta: (_delta, full) => {
@@ -973,6 +1036,8 @@ function DebateModal({ council, agent, onClose }) {
       setIsStreaming(false);
     }
   };
+
+  const processing = attachments.some((a) => a.status === 'processing');
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -1000,6 +1065,7 @@ function DebateModal({ council, agent, onClose }) {
                   lineHeight: 1.5,
                   background: m.role === 'user' ? 'rgba(0,229,199,0.12)' : 'rgba(255,255,255,0.04)',
                   border: m.role === 'user' ? '1px solid rgba(0,229,199,0.3)' : '1px solid var(--line)',
+                  whiteSpace: m.role === 'user' ? 'pre-wrap' : undefined,
                 }}
                 dangerouslySetInnerHTML={{
                   __html: m.role === 'assistant' ? renderMarkdown(m.content) || (m.streaming ? '<span class="typing"><span></span><span></span><span></span></span>' : '') : m.content,
@@ -1009,7 +1075,16 @@ function DebateModal({ council, agent, onClose }) {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        {attachments.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <AttachmentUploader attachments={attachments} setAttachments={setAttachments} compact />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+          {attachments.length === 0 && (
+            <AttachmentUploader attachments={attachments} setAttachments={setAttachments} compact />
+          )}
           <input
             type="text"
             value={input}
@@ -1019,7 +1094,7 @@ function DebateModal({ council, agent, onClose }) {
             className="input-field"
             disabled={isStreaming}
           />
-          <button onClick={send} disabled={!input.trim() || isStreaming} className="btn-primary" style={{ padding: '10px 16px' }}>
+          <button onClick={send} disabled={!input.trim() || isStreaming || processing} className="btn-primary" style={{ padding: '10px 16px' }}>
             {isStreaming ? '...' : 'Enviar'}
           </button>
         </div>

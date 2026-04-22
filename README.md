@@ -17,10 +17,33 @@ Carreira, Finanças, Pesquisa, Ensino, Casos Clínicos, Casos Jurídicos, Planej
 - **Medidor de divergência** (0-100%) calculado sobre as 6 respostas iniciais
 - **Perguntas direcionadas** no passo 8: dirija uma pergunta a conselheiros específicos
 - **Debate 1-on-1**: modal de chat com qualquer conselheiro individualmente
+- **Anexos em todo fluxo**: PDF, DOCX, PPTX, TXT, MD, CSV, PNG, JPG — texto extraído automaticamente e injetado no prompt
 - **Citações** automáticas (via Perplexity Sonar com busca web nativa)
 - **Personas editáveis** por tópico (templates, mas você pode ajustar cada conselheiro)
 
 ---
+
+## Anexos
+
+Suporte a 9 formatos, com processamento automático:
+
+| Formato | Onde processa | Lib |
+|---|---|---|
+| PDF | Backend (Node) | `pdf-parse` |
+| DOCX | Backend (Node) | `mammoth` |
+| PPTX | Backend (Node) | `jszip` + parser XML custom |
+| PNG / JPG / WEBP / GIF | Backend (Node) | Claude Vision via OpenRouter (OCR + descrição) |
+| TXT / MD / CSV / TSV / JSON | Browser | FileReader nativo |
+
+Limites:
+- **20 MB por arquivo**
+- **5 arquivos por ação** (pergunta inicial, passo 8, cada mensagem do debate)
+- Texto extraído é truncado em 120k caracteres (~30k tokens)
+
+Anexos funcionam em 3 pontos:
+1. **Pergunta inicial** (tela de setup) — anexos vão no prompt do board inteiro
+2. **Passo 8** (follow-up) — anexos vão pros conselheiros direcionados
+3. **Modal de debate 1-on-1** — anexos ficam apenas nessa conversa individual
 
 ## Stack
 
