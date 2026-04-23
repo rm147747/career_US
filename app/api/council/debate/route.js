@@ -34,6 +34,7 @@ export async function POST(req) {
 
     const stream = await streamFromOpenRouter({
       model: counselor.model,
+      fallbackModel: counselor.fallbackModel,
       messages,
       temperature: 0.75,
       maxTokens: 1000,

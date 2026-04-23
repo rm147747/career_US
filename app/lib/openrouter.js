@@ -13,32 +13,46 @@ const OPENROUTER_BASE = process.env.OPENROUTER_BASE_URL || 'https://openrouter.a
  *   event: done       data: {"usage": {...}}
  *   event: error      data: {"error": "..."}
  */
-export async function streamFromOpenRouter({ model, messages, temperature = 0.7, maxTokens = 2000 }) {
+export async function streamFromOpenRouter({ model, fallbackModel, messages, temperature = 0.7, maxTokens = 2000 }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY não configurada. Configure em Vercel → Settings → Environment Variables.');
   }
 
-  const upstream = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://career-us.vercel.app',
-      'X-Title': 'Life Board',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-      stream: true,
-    }),
-  });
+  const attempt = async (modelToUse) => {
+    return fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://career-us.vercel.app',
+        'X-Title': 'Life Board',
+      },
+      body: JSON.stringify({
+        model: modelToUse,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: true,
+      }),
+    });
+  };
+
+  let upstream = await attempt(model);
+
+  // Se o modelo primário retornou 400/404 com erro de "invalid model",
+  // tenta o fallback sem derrubar a sessão inteira.
+  if (!upstream.ok && fallbackModel && (upstream.status === 400 || upstream.status === 404)) {
+    const errText = await upstream.clone().text().catch(() => '');
+    if (/not a valid model|model.{0,20}not found|no endpoints/i.test(errText)) {
+      console.warn(`[openrouter] ${model} inválido, usando fallback ${fallbackModel}`);
+      upstream = await attempt(fallbackModel);
+    }
+  }
 
   if (!upstream.ok || !upstream.body) {
     const errText = await upstream.text().catch(() => 'unknown');
-    throw new Error(`OpenRouter ${upstream.status}: ${errText}`);
+    throw new Error(`OpenRouter ${upstream.status}: ${errText.slice(0, 300)}`);
   }
 
   const encoder = new TextEncoder();

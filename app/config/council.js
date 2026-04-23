@@ -7,14 +7,15 @@ export const LLMS = [
     id: 'claude',
     name: 'Claude',
     model: 'anthropic/claude-opus-4.5',
+    fallbackModel: 'anthropic/claude-sonnet-4.5',
     color: '#D97B4A',
     order: 1,
   },
   {
     id: 'perplexity',
     name: 'Perplexity',
-    // sonar-pro (não reasoning) = citações sem o problema de <think> tags
     model: 'perplexity/sonar-pro',
+    fallbackModel: 'perplexity/sonar',
     color: '#20B8B0',
     order: 2,
     supportsCitations: true,
@@ -22,32 +23,33 @@ export const LLMS = [
   {
     id: 'gemini',
     name: 'Gemini',
-    // Gemini 3 Pro — flagship atual do Google
-    model: 'google/gemini-3-pro',
+    // Gemini 3 Pro Preview — flagship Google atual (slug oficial OpenRouter Abr/2026)
+    model: 'google/gemini-3-pro-preview',
+    fallbackModel: 'google/gemini-2.5-pro',
     color: '#8AB4F8',
     order: 3,
   },
   {
     id: 'deepseek',
     name: 'DeepSeek',
-    // DeepSeek V3.2 experimental — melhor custo/benefício
     model: 'deepseek/deepseek-v3.2-exp',
+    fallbackModel: 'deepseek/deepseek-chat',
     color: '#6FA8FF',
     order: 4,
   },
   {
     id: 'grok',
     name: 'Grok',
-    // Grok 4.20 — mais estável que grok-4, prompt calibrado para ser contra-ponto sério
     model: 'x-ai/grok-4.20',
+    fallbackModel: 'x-ai/grok-4',
     color: '#B8B8B8',
     order: 5,
   },
   {
     id: 'gpt',
     name: 'GPT',
-    // GPT-5.4 (flagship atual, não requer BYOK como gpt-5 puro)
     model: 'openai/gpt-5.4',
+    fallbackModel: 'openai/gpt-4o',
     color: '#19C37D',
     order: 6,
     isPresident: true,
