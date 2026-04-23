@@ -73,6 +73,7 @@ export async function POST(req) {
       messages,
       temperature: isPresident ? 0.4 : 0.75,
       maxTokens: isPresident ? 2500 : 1500,
+      reasoningEffort: counselor.reasoningEffort,
     });
 
     return new Response(stream, {

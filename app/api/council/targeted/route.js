@@ -47,6 +47,7 @@ export async function POST(req) {
       messages,
       temperature: 0.7,
       maxTokens: 1200,
+      reasoningEffort: counselor.reasoningEffort,
     });
 
     return new Response(stream, {

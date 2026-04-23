@@ -23,11 +23,14 @@ export const LLMS = [
   {
     id: 'gemini',
     name: 'Gemini',
-    // Gemini 3 Pro Preview — flagship Google atual (slug oficial OpenRouter Abr/2026)
-    model: 'google/gemini-3-pro-preview',
+    // Gemini 3 Flash Preview: thinking model, mas "flash" = reasoning mais barato/rápido.
+    // O "pro-preview" consome reasoning tokens demais e corta respostas.
+    model: 'google/gemini-3-flash-preview',
     fallbackModel: 'google/gemini-2.5-pro',
     color: '#8AB4F8',
     order: 3,
+    // Flag: modelos thinking do Google precisam de reasoning.effort explícito
+    reasoningEffort: 'low',
   },
   {
     id: 'deepseek',

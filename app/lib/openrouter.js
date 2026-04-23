@@ -13,11 +13,27 @@ const OPENROUTER_BASE = process.env.OPENROUTER_BASE_URL || 'https://openrouter.a
  *   event: done       data: {"usage": {...}}
  *   event: error      data: {"error": "..."}
  */
-export async function streamFromOpenRouter({ model, fallbackModel, messages, temperature = 0.7, maxTokens = 2000 }) {
+export async function streamFromOpenRouter({ model, fallbackModel, messages, temperature = 0.7, maxTokens = 2000, reasoningEffort }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY não configurada. Configure em Vercel → Settings → Environment Variables.');
   }
+
+  const buildBody = (modelToUse) => {
+    const body = {
+      model: modelToUse,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream: true,
+    };
+    // OpenRouter unified reasoning param (https://openrouter.ai/docs/use-cases/reasoning-tokens)
+    // Usado por Gemini 3, Claude thinking, o-series etc. Padrão: desabilitado.
+    if (reasoningEffort) {
+      body.reasoning = { effort: reasoningEffort }; // 'low' | 'medium' | 'high'
+    }
+    return body;
+  };
 
   const attempt = async (modelToUse) => {
     return fetch(`${OPENROUTER_BASE}/chat/completions`, {
@@ -28,13 +44,7 @@ export async function streamFromOpenRouter({ model, fallbackModel, messages, tem
         'HTTP-Referer': 'https://career-us.vercel.app',
         'X-Title': 'Life Board',
       },
-      body: JSON.stringify({
-        model: modelToUse,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-        stream: true,
-      }),
+      body: JSON.stringify(buildBody(modelToUse)),
     });
   };
 
