@@ -70,8 +70,8 @@ export async function POST(req) {
     const stream = await streamFromOpenRouter({
       model: counselor.model,
       messages,
-      temperature: isPresident ? 0.5 : 0.8,
-      maxTokens: isPresident ? 1200 : 700,
+      temperature: isPresident ? 0.4 : 0.75,
+      maxTokens: isPresident ? 2500 : 1500,
     });
 
     return new Response(stream, {

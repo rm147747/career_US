@@ -45,7 +45,7 @@ export async function POST(req) {
       model: counselor.model,
       messages,
       temperature: 0.7,
-      maxTokens: 600,
+      maxTokens: 1200,
     });
 
     return new Response(stream, {
