@@ -269,6 +269,41 @@ export const COUNCILS = [
     },
     userQuestion: 'Cole o paper ou descreva o estudo, seu campo, e a pergunta específica.',
   },
+  {
+    id: 'prompt-advisor',
+    icon: 'i-prompt',
+    title: 'Arquiteto de Prompts',
+    subtitle: 'O prompt ideal para cada IA na sua situação específica',
+    tagline: 'prompt · arquitetura · otimização',
+    isPromptAdvisor: true,
+    personas: {
+      claude: {
+        role: 'Especialista em Prompts Claude',
+        brief: 'Meu ponto forte: raciocínio estruturado com tags XML, instruções em blocos claros, chain-of-thought explícito, persona bem definida e contexto rico. Respondo melhor a pedidos com exemplos few-shot, restrições claras de formato e separação explícita entre contexto, instrução e saída esperada.',
+      },
+      perplexity: {
+        role: 'Especialista em Prompts Perplexity',
+        brief: 'Meu ponto forte: busca web em tempo real, dados atualizados, citações verificáveis. Funciono melhor com perguntas que exigem informações recentes, comparações de mercado, benchmarks, notícias ou respostas que precisam de fontes. Não sou ideal para criação pura ou raciocínio puramente abstrato — use-me quando a atualidade importa.',
+      },
+      gemini: {
+        role: 'Especialista em Prompts Gemini',
+        brief: 'Meu ponto forte: raciocínio multi-etapa (thinking mode), tarefas multimodais (imagem + texto + código), análise de documentos longos e síntese de contextos complexos. Respondo muito bem a prompts que pedem "pense passo a passo", estrutura detalhada de saída e tarefas que combinam múltiplos formatos de entrada.',
+      },
+      deepseek: {
+        role: 'Especialista em Prompts DeepSeek',
+        brief: 'Meu ponto forte: raciocínio técnico e matemático profundo, código complexo, lógica rigorosa e verificação passo a passo. Respondo excepcionalmente bem a prompts que exigem chain-of-thought detalhado, problemas de engenharia ou ciência exata, e quando o usuário quer ver o raciocínio completo antes da resposta final.',
+      },
+      grok: {
+        role: 'Especialista em Prompts Grok',
+        brief: 'Meu ponto forte: informações em tempo real do X/Twitter, tendências emergentes, perspectivas não-convencionais e análise de cultura digital. Funciono bem com prompts que pedem visão contrária, análise de redes sociais, raciocínio direto e irreverente, ou quando você quer que eu questione o consenso e aponte o que ninguém está dizendo.',
+      },
+      gpt: {
+        role: 'Presidente — Arquiteto-Chefe de Prompts',
+        brief: 'Sintetiza os 5 prompts em princípios universais, destaca o diferencial de cada IA para essa situação, recomenda qual usar e também entrega meu próprio prompt ideal como GPT.',
+      },
+    },
+    userQuestion: 'Descreva sua situação ou tarefa com detalhes: o que você quer fazer, qual resultado espera, qual o contexto e quais restrições existem. Cada IA irá propor o prompt ideal para ser usado especificamente com ela.',
+  },
 ];
 
 export function getCouncil(id) {

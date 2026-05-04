@@ -13,6 +13,8 @@ import {
   streamFromOpenRouter,
   buildCounselorSystemPrompt,
   buildPresidentSystemPrompt,
+  buildPromptAdvisorSystemPrompt,
+  buildPromptAdvisorPresidentSystemPrompt,
 } from '../../../lib/openrouter';
 
 export const runtime = 'edge'; // streaming é bem mais simples no edge runtime
@@ -40,20 +42,24 @@ export async function POST(req) {
     }
 
     const isPresident = counselor.isPresident;
-    const systemPrompt = isPresident
-      ? buildPresidentSystemPrompt({ councilTitle: council.title })
-      : buildCounselorSystemPrompt({
-          councilTitle: council.title,
-          counselorName: counselor.name,
-          role: persona.role,
-          brief: persona.brief,
-        });
+    const isPromptAdvisor = council.isPromptAdvisor || false;
+
+    let systemPrompt;
+    if (isPresident) {
+      systemPrompt = isPromptAdvisor
+        ? buildPromptAdvisorPresidentSystemPrompt()
+        : buildPresidentSystemPrompt({ councilTitle: council.title });
+    } else {
+      systemPrompt = isPromptAdvisor
+        ? buildPromptAdvisorSystemPrompt({ counselorName: counselor.name, role: persona.role, brief: persona.brief })
+        : buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: counselor.name, role: persona.role, brief: persona.brief });
+    }
 
     // Monta histórico: user question → respostas anteriores (cada uma como assistant)
     const messages = [{ role: 'system', content: systemPrompt }];
     messages.push({
       role: 'user',
-      content: `**Pergunta do usuário (decisor):**\n\n${userQuestion}`,
+      content: `**Situação descrita pelo usuário:**\n\n${userQuestion}`,
     });
 
     // Injeta as respostas anteriores como contexto
@@ -61,10 +67,12 @@ export async function POST(req) {
       const priorBlock = priorResponses
         .map((r) => `### ${r.name} — ${r.role}\n${r.text}`)
         .join('\n\n---\n\n');
-      messages.push({
-        role: 'user',
-        content: `Conselheiros anteriores já responderam. Leia e construa/contraponha a partir deles:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name} — ${persona.role}).** Responda de acordo com sua persona, trazendo o ângulo único que ninguém antes abordou.`,
-      });
+
+      const turnInstruction = isPromptAdvisor
+        ? `As IAs anteriores já entregaram os prompts ideais delas:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name}).** Entregue o prompt ideal para usar COM VOCÊ — específico para sua arquitetura e para a situação acima. Seja distinto das outras IAs: mostre o que faz seu prompt único.`
+        : `Conselheiros anteriores já responderam. Leia e construa/contraponha a partir deles:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name} — ${persona.role}).** Responda de acordo com sua persona, trazendo o ângulo único que ninguém antes abordou.`;
+
+      messages.push({ role: 'user', content: turnInstruction });
     }
 
     const stream = await streamFromOpenRouter({
