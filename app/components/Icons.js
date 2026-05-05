@@ -16,6 +16,7 @@ const PATHS = {
   'i-book': 'M4 19.5A2.5 2.5 0 016.5 17H20V2H6.5A2.5 2.5 0 004 4.5v15zM4 19.5V22h16',
   'i-paper': 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M8 13h8M8 17h5',
   'i-prompt': 'M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4z',
+  'i-board': 'M3 18h18M5 18l2-9 5 4 5-4 2 9',
 };
 
 export function Icon({ name, size = 22, color }) {

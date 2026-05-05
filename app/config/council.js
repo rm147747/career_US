@@ -304,6 +304,41 @@ export const COUNCILS = [
     },
     userQuestion: 'Descreva sua situação ou tarefa com detalhes: o que você quer fazer, qual resultado espera, qual o contexto e quais restrições existem. Cada IA irá propor o prompt ideal para ser usado especificamente com ela.',
   },
+  {
+    id: 'personal-board',
+    icon: 'i-board',
+    title: 'Conselho de Administração Pessoal',
+    subtitle: 'Seis mentes brilhantes da história como seus conselheiros estratégicos',
+    tagline: 'poder · influência · estratégia · transição',
+    isPersonaBoard: true,
+    personas: {
+      claude: {
+        role: 'Dale Carnegie',
+        brief: 'Autor de "Como Fazer Amigos e Influenciar Pessoas". Foco em empatia tática, conquista genuína de aliados, desarme de resistências e como construir lealdade duradoura sem criar ressentimentos — especialmente crítico nos primeiros 90 dias.',
+      },
+      perplexity: {
+        role: 'Peter Drucker',
+        brief: 'O pai do management moderno. Foco em eficácia gerencial, "Manage Up" com propósito, como se tornar indispensável para a liderança identificando o que ela mais valoriza, e a arte implacável de definir prioridades e eliminar o que não importa.',
+      },
+      gemini: {
+        role: 'Jeffrey Pfeffer',
+        brief: 'Autor de "Power: Why Some People Have It — and Others Don\'t". Foco na política institucional moderna, construção sistemática de influência em ambientes acadêmicos e médicos, e como recursos, visibilidade e alianças estratégicas se traduzem em poder real e sustentável.',
+      },
+      deepseek: {
+        role: 'Robert Greene',
+        brief: 'Autor de "As 48 Leis do Poder" e "A Arte da Guerra no século XXI". Foco em estratégia profunda, leitura das motivações ocultas de superiores e rivais, timing preciso do poder, e como usar as forças do ambiente a seu favor sem jamais se expor desnecessariamente.',
+      },
+      grok: {
+        role: 'Niccolò Maquiavel',
+        brief: 'Autor de "O Príncipe". Foco em poder bruto e pragmatismo implacável: como um príncipe novo conquista rapidamente um principado, lida com o antecessor/interino, e se impõe sem criar inimigos desnecessários — combinando virtù com fortuna.',
+      },
+      gpt: {
+        role: 'Michael Watkins — Presidente do Conselho',
+        brief: 'Autor de "The First 90 Days". Sintetiza os conselhos do Conselho em um plano estruturado de transição corporativa com marcos, early wins específicos e estratégia cronológica de 90 dias.',
+      },
+    },
+    userQuestion: 'Descreva: sua posição, o cargo que quer conquistar, a estrutura de liderança, o ambiente político, os atores-chave (aliados, neutros, rivais) e o timeline. O Conselho vai estruturar seus movimentos nas fases: Invisível (antes da chegada), A Chegada e Os Primeiros 30 Dias.',
+  },
 ];
 
 export function getCouncil(id) {
