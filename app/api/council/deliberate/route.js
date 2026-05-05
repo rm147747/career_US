@@ -15,6 +15,8 @@ import {
   buildPresidentSystemPrompt,
   buildPromptAdvisorSystemPrompt,
   buildPromptAdvisorPresidentSystemPrompt,
+  buildPersonaBoardSystemPrompt,
+  buildPersonaBoardPresidentSystemPrompt,
 } from '../../../lib/openrouter';
 
 export const runtime = 'edge'; // streaming é bem mais simples no edge runtime
@@ -43,16 +45,17 @@ export async function POST(req) {
 
     const isPresident = counselor.isPresident;
     const isPromptAdvisor = council.isPromptAdvisor || false;
+    const isPersonaBoard = council.isPersonaBoard || false;
 
     let systemPrompt;
     if (isPresident) {
-      systemPrompt = isPromptAdvisor
-        ? buildPromptAdvisorPresidentSystemPrompt()
-        : buildPresidentSystemPrompt({ councilTitle: council.title });
+      if (isPromptAdvisor) systemPrompt = buildPromptAdvisorPresidentSystemPrompt();
+      else if (isPersonaBoard) systemPrompt = buildPersonaBoardPresidentSystemPrompt();
+      else systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title });
     } else {
-      systemPrompt = isPromptAdvisor
-        ? buildPromptAdvisorSystemPrompt({ counselorName: counselor.name, role: persona.role, brief: persona.brief })
-        : buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: counselor.name, role: persona.role, brief: persona.brief });
+      if (isPromptAdvisor) systemPrompt = buildPromptAdvisorSystemPrompt({ counselorName: counselor.name, role: persona.role, brief: persona.brief });
+      else if (isPersonaBoard) systemPrompt = buildPersonaBoardSystemPrompt({ role: persona.role, brief: persona.brief });
+      else systemPrompt = buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: counselor.name, role: persona.role, brief: persona.brief });
     }
 
     // Monta histórico: user question → respostas anteriores (cada uma como assistant)
@@ -68,9 +71,14 @@ export async function POST(req) {
         .map((r) => `### ${r.name} — ${r.role}\n${r.text}`)
         .join('\n\n---\n\n');
 
-      const turnInstruction = isPromptAdvisor
-        ? `As IAs anteriores já entregaram os prompts ideais delas:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name}).** Entregue o prompt ideal para usar COM VOCÊ — específico para sua arquitetura e para a situação acima. Seja distinto das outras IAs: mostre o que faz seu prompt único.`
-        : `Conselheiros anteriores já responderam. Leia e construa/contraponha a partir deles:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name} — ${persona.role}).** Responda de acordo com sua persona, trazendo o ângulo único que ninguém antes abordou.`;
+      let turnInstruction;
+      if (isPromptAdvisor) {
+        turnInstruction = `As IAs anteriores já entregaram os prompts ideais delas:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name}).** Entregue o prompt ideal para usar COM VOCÊ — específico para sua arquitetura e para a situação acima. Seja distinto das outras IAs: mostre o que faz seu prompt único.`;
+      } else if (isPersonaBoard) {
+        turnInstruction = `Seus colegas do conselho já deram seus conselhos:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${persona.role}).** Fale exclusivamente como ${persona.role} — construa sobre, contraponha ou aprofunde o que foi dito, mas mantenha APENAS a sua perspectiva e os seus conceitos.`;
+      } else {
+        turnInstruction = `Conselheiros anteriores já responderam. Leia e construa/contraponha a partir deles:\n\n${priorBlock}\n\n---\n\n**Agora é sua vez (${counselor.name} — ${persona.role}).** Responda de acordo com sua persona, trazendo o ângulo único que ninguém antes abordou.`;
+      }
 
       messages.push({ role: 'user', content: turnInstruction });
     }
