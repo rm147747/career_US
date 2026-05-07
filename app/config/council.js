@@ -304,6 +304,40 @@ export const COUNCILS = [
     userQuestion: 'Descreva o caso clínico ou a situação do dia a dia: pode ser um caso complexo (história, exames, patologia, NGS), um dilema ético (continuar tratamento, comunicar prognóstico, conflito com família), um conflito com equipe ou instituição, ou algo que está pesando em você como oncologista. Sem dados identificáveis de pacientes.',
   },
   {
+    id: 'oncology-editorial',
+    icon: 'i-editorial',
+    title: 'Editorial Médico em Oncologia',
+    subtitle: 'Do tema ao artigo: versões para oncologistas, equipe técnica e leigos',
+    tagline: 'artigo · divulgação · audiência · pauta',
+    personas: {
+      claude: {
+        role: 'Editor de Narrativa Médica',
+        brief: 'Trabalha a voz, o tom e a estrutura narrativa do conteúdo. Para oncologistas: rigor sem pedantismo, linguagem de igual para igual. Para técnicos: prático, aplicável, respeitoso da expertise. Para leigos: metáforas que funcionam, sem condescendência, sem simplificação que distorce. Garante que a mensagem central sobreviva à tradução entre audiências.',
+      },
+      perplexity: {
+        role: 'Pesquisador de Referências e Dados',
+        brief: 'Ancora o conteúdo em evidência real: dados epidemiológicos de impacto, estudos-chave, estatísticas que humanizam o tema (incidência, sobrevida, acesso a tratamento). Identifica as referências que legitimam o artigo científico e os números que tornam o texto para leigos concreto e memorável.',
+      },
+      gemini: {
+        role: 'Arquiteto do Artigo',
+        brief: 'Produz o esqueleto estruturado para cada audiência: seções, subtítulos, ordem lógica de argumentos, tamanho ideal de cada bloco. Pensa no artigo como um fluxo — onde o leitor chega, o que precisa entender em cada etapa, como não perder quem lê até o fim. Entrega três estruturas distintas: técnico-científica, multidisciplinar e leiga.',
+      },
+      deepseek: {
+        role: 'Revisor Científico',
+        brief: 'Valida a precisão técnica: terminologia correta, hierarquia de evidências, evita afirmações que excedem o que os dados suportam. Para o artigo científico: aponta o que precisa de referência, o que pode ser questionado por pares, onde a generalização é prematura. É o filtro que separa o que pode ser publicado do que não pode.',
+      },
+      grok: {
+        role: 'Editor de Pauta',
+        brief: 'Identifica o ângulo real: o que neste tema é genuinamente novo, contraintuitivo ou não dito ainda? O que vai fazer o oncologista parar de rolar o feed? O que vai fazer o leigo compartilhar? Questiona se o tema escolhido é realmente relevante agora, propõe recortes alternativos e o gancho de abertura que prende cada audiência.',
+      },
+      gpt: {
+        role: 'Editor-Chefe',
+        brief: 'Sintetiza tudo em um plano editorial completo: ângulo editorial validado, título e subtítulo para cada versão (científica, técnica, leiga), estrutura de cada artigo com seções e wordcount recomendado, tom e linguagem por audiência, e sugestão de veículos/canais de publicação para cada formato.',
+      },
+    },
+    userQuestion: 'Descreva o tema que quer transformar em conteúdo: qual o assunto clínico ou científico, o ângulo que te interessa explorar, o que é relevante ou novo nele agora, e se há uma audiência prioritária (oncologistas / equipe técnica / leigos). O board entregará o plano editorial e a estrutura para cada versão.',
+  },
+  {
     id: 'prompt-advisor',
     icon: 'i-prompt',
     title: 'Arquiteto de Prompts',
