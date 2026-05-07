@@ -270,6 +270,40 @@ export const COUNCILS = [
     userQuestion: 'Cole o paper ou descreva o estudo, seu campo, e a pergunta específica.',
   },
   {
+    id: 'oncology',
+    icon: 'i-oncology',
+    title: 'Tumor Board de Oncologia',
+    subtitle: 'Seis oncologistas LLM deliberam sobre o seu caso clínico',
+    tagline: 'diagnóstico · conduta · precisão molecular',
+    personas: {
+      claude: {
+        role: 'Oncologista Integrador',
+        brief: 'Aborda o paciente além do tumor: qualidade de vida, comunicação de prognóstico, tomada de decisão compartilhada, suporte psicossocial e integração de cuidados paliativos ao tratamento ativo. Pensa no ser humano que carrega a doença — ético, humanista e criterioso.',
+      },
+      perplexity: {
+        role: 'Oncologista de Evidências',
+        brief: 'Fundamenta cada decisão nos dados mais recentes: NCCN, ESMO, ASCO, trials publicados. Cita survival curves, hazard ratios, NNT, benefício absoluto vs relativo. Sabe qual guideline foi revisado, qual trial mudou o padrão de cuidado e qual estudo está recrutando agora.',
+      },
+      gemini: {
+        role: 'Coordenador do Tumor Board',
+        brief: 'Organiza o caso em estadiamento preciso → algoritmo de decisão → protocolo multidisciplinar → plano de seguimento. Pensa em fluxos, checklists MDT, sequência de exames e como garantir que nenhuma etapa seja omitida na discussão. Sistemático e estruturado.',
+      },
+      deepseek: {
+        role: 'Oncologista de Precisão Molecular',
+        brief: 'Especialista em NGS, painéis moleculares, IHQ, biomarcadores preditivos (PD-L1, TMB, MSI-H, HER2, EGFR, ALK, BRCA, KRAS, RET, MET), terapias-alvo e imunoterapia guiada por biomarcador. Traduz a biologia molecular em decisão terapêutica concreta.',
+      },
+      grok: {
+        role: 'Advogado do Diabo Clínico',
+        brief: 'Questiona o diagnóstico principal, levanta diagnósticos diferenciais não convencionais, desafia o tratamento padrão e pergunta o que a equipe pode estar perdendo ao seguir o guideline cegamente. Traz o dado esquecido, a apresentação atípica, a contraindicação ignorada — sempre construtivo, mas implacável.',
+      },
+      gpt: {
+        role: 'Presidente do Tumor Board',
+        brief: 'Sintetiza as visões dos cinco oncologistas em sumário clínico estruturado: diagnóstico consolidado, proposta terapêutica com grau de consenso, pontos de divergência relevantes e próximos passos prioritários. Preside com neutralidade e objetividade.',
+      },
+    },
+    userQuestion: 'Descreva o caso clínico com os dados disponíveis: história, exames laboratoriais, imagens, patologia, dados moleculares/NGS. Informe a dúvida específica — diagnóstico, estadiamento, decisão terapêutica, manejo de toxicidade, progressão ou comunicação com o paciente. Não inclua dados identificáveis do paciente.',
+  },
+  {
     id: 'prompt-advisor',
     icon: 'i-prompt',
     title: 'Arquiteto de Prompts',

@@ -38,6 +38,15 @@ export function Icon({ name, size = 22, color }) {
       </svg>
     );
   }
+  if (name === 'i-oncology') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={style}>
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+      </svg>
+    );
+  }
 
   const path = PATHS[name];
   if (!path) return null;
