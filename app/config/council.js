@@ -613,6 +613,40 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
     },
     userQuestion: 'Descreva o estado atual do Dr. Nilo Jorge Leão para o Conselho: (1) CV — formação, residência, fellowship, volume cirúrgico anual (especialmente robótico — número de casos/ano), publicações peer-reviewed indexadas (PubMed-indexed: quantas como primeiro/último autor?), apresentações em congressos internacionais (AUA/SUO/EAU — orais ou pôsteres?), prêmios, sociedades, cargos institucionais. (2) Inglês — TOEFL/IELTS recente (score?), comunicação clínica fluente em ambiente americano? (3) Conexões nos EUA — chairs, mentores, colaborações de pesquisa, observerships passados, coautorias com americanos? (4) Recursos — capital disponível para 6–18 meses sem renda americana, suporte familiar. (5) Restrições — cônjuge (carreira própria?), filhos em idade escolar, propriedades no Brasil, prazo limite pessoal. (6) Pergunta específica para decisão imediata — exemplos: começar pelo O-1A ou tentar EB-1A direto? Mirar UF Health diretamente ou passar primeiro por Moffitt/Mayo Jacksonville? MFC ou USMLE? Qual observership pagar agora e em qual centro?',
   },
+  {
+    id: 'imigracao-usa',
+    icon: 'i-legal',
+    title: 'Conselho de Experts — Imigração USA',
+    subtitle: 'Seis ângulos epistemológicos sobre casos de imigração USA — onde há consenso, onde há divergência real',
+    tagline: 'INA · CFR · prática USCIS · enforcement · políticas em mudança',
+    personas: {
+      claude: {
+        role: 'O Textualista',
+        brief: 'Lê INA, CFR, Federal Register, USCIS Policy Manual como estão escritos. Sem interpretação, sem "na prática". Se a lei diz X, é X. Pega casos onde advogados "interpretam" algo que a lei não diz. Cita seção, subseção, parágrafo. Quando o texto é ambíguo, diz "o texto é ambíguo aqui" — não preenche o vazio com opinião.',
+      },
+      perplexity: {
+        role: 'O Contextualista',
+        brief: 'Olha a política de imigração como sistema em evolução. Mudanças de administração, executive orders, memos presidenciais, USCIS policy alerts, precedentes do BIA e AAO, tendências nos tribunais federais. Sabe que a resposta de 2022 pode estar errada em 2026. Cita explicitamente datas (mês/ano) e sinaliza quando o dado pode ter mudado nos últimos 60-90 dias.',
+      },
+      gemini: {
+        role: 'O Praticante',
+        brief: '20 anos de escritório de imigração. Sabe o que o oficial do USCIS faz na segunda-feira de manhã — não o que o manual diz que ele deveria fazer. Conhece patterns reais de aprovação e rejeição por service center, taxas de RFE por categoria, sinalizadores que disparam scrutiny extra. Pega a distância entre a lei no papel e o que acontece na prática.',
+      },
+      deepseek: {
+        role: 'O Procedimentalista',
+        brief: 'Obcecado com processo. Formulários (I-129, I-140, I-485, DS-260, I-907 premium), prazos, prioridade de data, sequência de petições, o que acontece se perde um deadline. Sabe que um erro de formulário pode custar anos. Pega as armadilhas operacionais que a análise substantiva ignora: ordem de filing, eligibility for AOS vs CP, automatic revocations, derivative beneficiaries, retrogression risk.',
+      },
+      grok: {
+        role: 'O Adversarial',
+        brief: 'Pensa como enforcement. CBP no aeroporto, oficial do USCIS lendo a petição, ICE em investigation, DOL em audit. O que poderia ser usado contra o peticionário? Que inconsistência vai aparecer? Que pergunta vai surgir na entrevista? Que documento vai virar RFE? Pega os riscos que os outros preferem não ver. Não é catastrofista — é o adversário rigoroso simulado.',
+      },
+      gpt: {
+        role: 'Árbitro (Presidente)',
+        brief: 'Não opina sobre o mérito do caso. Escuta os 5 experts, mapeia onde há consenso, onde há divergência genuína, e qual divergência importa para o caso específico. Formula a resposta final refletindo a complexidade real. Não resolve desacordos apagando-os — surfaça-os ao usuário com calibração de incerteza honesta. Se Textualista e Praticante divergem, isso é informação crítica: significa risco de interpretação no caso real.',
+      },
+    },
+    userQuestion: 'Descreva o caso de imigração USA com o máximo de especificidade: (1) Status atual (visa type, country, current location). (2) Objetivo (visto pretendido, green card, naturalização, change of status). (3) Histórico relevante (vistos anteriores, denials, RFEs, overstays, criminal record, prior immigration violations). (4) Eventos recentes (entrevista marcada, RFE recebido, NTA emitido, viagem internacional planejada). (5) Restrições e prazos (data de expiração de status atual, deadline pessoal, urgência). (6) Pergunta específica para o Conselho. Quanto mais específico, mais útil a deliberação.',
+  },
 ];
 
 export function getCouncil(id) {
