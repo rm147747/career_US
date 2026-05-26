@@ -28,6 +28,7 @@ export async function POST(req) {
       role: persona.role,
       brief: persona.brief,
       boardPrinciples: council.boardPrinciples,
+      knowledgeBase: council.knowledgeBase,
     });
 
     const contextBlock = fullHistory
