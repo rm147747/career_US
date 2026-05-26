@@ -28,6 +28,7 @@ export async function POST(req) {
       role: persona.role,
       brief: persona.brief,
       originalResponse: originalResponse || '(sem resposta original registrada)',
+      boardPrinciples: council.boardPrinciples,
     });
 
     const messages = [{ role: 'system', content: systemPrompt }, ...chatHistory, { role: 'user', content: userMessage }];

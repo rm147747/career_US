@@ -206,12 +206,13 @@ export async function streamFromOpenRouter({ model, fallbackModel, messages, tem
 /**
  * Constrói o system prompt de um conselheiro.
  */
-export function buildCounselorSystemPrompt({ councilTitle, counselorName, role, brief }) {
+export function buildCounselorSystemPrompt({ councilTitle, counselorName, role, brief, boardPrinciples }) {
+  const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique a cada resposta):**\n${boardPrinciples}\n` : '';
   return `Você é ${counselorName}, um conselheiro sênior no Life Board — uma plataforma séria de apoio à tomada de decisão estratégica. Usuários reais trazem decisões importantes (carreira, clínica, financeira, pesquisa) e esperam análise rigorosa.
 
 **Contexto da sessão:** ${councilTitle}
 **Seu papel:** ${role}
-**Diretrizes da sua persona:** ${brief}
+**Diretrizes da sua persona:** ${brief}${principlesBlock}
 
 Como você contribui:
 - Você é o ${counselorName}, um dos 6 conselheiros do board. Os anteriores já falaram — leia e construa em cima.
@@ -239,10 +240,11 @@ Limites claros:
 /**
  * Constrói o system prompt do Presidente GPT.
  */
-export function buildPresidentSystemPrompt({ councilTitle }) {
+export function buildPresidentSystemPrompt({ councilTitle, boardPrinciples }) {
+  const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique à síntese):**\n${boardPrinciples}\n` : '';
   return `Você é o GPT, atuando como Presidente do Life Board. Um board de 6 conselheiros acabou de deliberar em sequência. Sua função é SINTETIZAR — nunca decidir.
 
-**Contexto da sessão:** ${councilTitle}
+**Contexto da sessão:** ${councilTitle}${principlesBlock}
 
 Entregue sua síntese usando EXATAMENTE esta estrutura, com estes 4 cabeçalhos em negrito (sem usar # ## ### em momento algum):
 
@@ -274,9 +276,10 @@ Regras absolutas:
 /**
  * Constrói o system prompt pra perguntas direcionadas (passo 8).
  */
-export function buildTargetedSystemPrompt({ councilTitle, counselorName, role, brief }) {
+export function buildTargetedSystemPrompt({ councilTitle, counselorName, role, brief, boardPrinciples }) {
+  const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique a cada resposta):**\n${boardPrinciples}\n` : '';
   return `Você é ${counselorName}, atuando como ${role} no Life Board — plataforma séria de decisão estratégica. Contexto: ${councilTitle}.
-Diretrizes da sua persona: ${brief}
+Diretrizes da sua persona: ${brief}${principlesBlock}
 
 O usuário já leu suas contribuições anteriores e está dirigindo uma pergunta específica a você. Responda direto, denso, 150-300 palavras. Sem preâmbulo. Tom profissional, respeitoso, construtivo. Markdown simples (negrito e listas curtas). Nunca use # ## ###. Português brasileiro.`;
 }
@@ -407,9 +410,10 @@ Regras absolutas:
 /**
  * Constrói o system prompt pro modo de debate 1-on-1 (modal).
  */
-export function buildDebateSystemPrompt({ counselorName, role, brief, originalResponse }) {
+export function buildDebateSystemPrompt({ counselorName, role, brief, originalResponse, boardPrinciples }) {
+  const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique a cada resposta):**\n${boardPrinciples}\n` : '';
   return `Você é ${counselorName}, atuando como ${role} no Life Board — plataforma séria de apoio à decisão.
-Diretrizes da sua persona: ${brief}
+Diretrizes da sua persona: ${brief}${principlesBlock}
 
 Sua contribuição original no board foi:
 """

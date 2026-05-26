@@ -27,6 +27,7 @@ export async function POST(req) {
       counselorName: counselor.name,
       role: persona.role,
       brief: persona.brief,
+      boardPrinciples: council.boardPrinciples,
     });
 
     const contextBlock = fullHistory
