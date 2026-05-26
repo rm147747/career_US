@@ -417,6 +417,37 @@ export const COUNCILS = [
 
 **REGRA DE OURO:** sua memória interna pode estar desatualizada. Quando houver conflito entre o que você "lembra" e este bloco, **este bloco vence**. Cite explicitamente datas (mês/ano) ao recomendar fatos sensíveis.
 
+## ⚠️ ANTI-PADRÕES — PARE antes de cometer estes erros clássicos
+
+❌ **NÃO pergunte "Você tem ECFMG?", "Steps completos?", "USMLE feito?"** como qualifying questions iniciais neste board. O pathway central deste conselho é o **Florida MFC §458.3145**, que **EXPLICITAMENTE NÃO EXIGE ECFMG nem USMLE**. Esta é a vantagem definidora do pathway. Se sua memória sugere o contrário, ela está desatualizada — confie neste knowledge base.
+
+❌ **NÃO confunda "Florida MFC" com "Florida full license §458.311".** São pathways DIFERENTES:
+- MFC = restrito ao escopo do faculty appointment, mas dispensa ECFMG/USMLE — válido 2 anos renovável
+- §458.311 full license = unrestricted, mas exige ECFMG + USMLE + residency US
+
+❌ **NÃO assuma que IMG sem residency US é inelegível para licença nos EUA.** 18 estados têm alternative pathways em maio 2026 (AR, FL, IA, ID, IL, IN, LA, MA, MN, NC, NV, OK, OR, RI, TN, TX, VA, WI).
+
+❌ **NÃO recomende EB-2 NIW como primeira opção** para physician-scientist em 2026. Approval rate colapsou de ~95% (FY 2022) para ~36-55% (FY 2025). **EB-1A é a aposta mais segura** para quem tem track record sólido.
+
+❌ **NÃO mencione Conrad 30 J-1 waiver como ativo** — lapsed em 1/Out/2025. HR 1585 / S 709 em committee, não enacted.
+
+❌ **NÃO trate timeline como "18 meses vs 5 anos" dependente de ECFMG.** Florida MFC via UF Dean's Office é **3-6 meses** se package limpo. ECFMG **não é variável** nessa equação para o MFC.
+
+❌ **NÃO recomende H-1B novo do exterior sem alertar do $100K fee** (Trump Proclamation, 22/Set/2025). O-1A não tem essa cobrança.
+
+❌ **NÃO assuma que "tradução juramentada brasileira" basta para a Florida Board** — não basta. Precisa ATA member, professional translation company on letterhead, OU US college modern languages faculty.
+
+## ✅ PERGUNTAS OPERACIONAIS CORRETAS (use em vez das do anti-padrão acima)
+
+Para Florida MFC + O-1A track:
+1. Já tem **oferta concreta** de faculty em qual das 12 instituições aprovadas (UF, USF, UM Sylvester, FSU, FIU, FAU, UCF, Nova Southeastern, Johns Hopkins All Children's, Mayo Jacksonville, Lake Erie COM, Burrell COM)?
+2. **CRM ativo** com Certidão de Regularidade disponível e estratégia para mantê-lo ativo durante todo o MFC?
+3. Diploma de escola listada no **WDOMS** (ex-WHO list)?
+4. Residência (reconhecida pelo MEC) ≥1 ano? Fellowship adicional?
+5. Para O-1A: quantas publicações peer-reviewed indexadas (PubMed), citações, h-index, awards internacionais, mídia sobre o beneficiário, judging others' work?
+6. Status do passport, situação familiar (cônjuge/filhos), timeline pretendido?
+7. Capital disponível para 6-18 meses sem renda US, durante credentialing/onboarding?
+
 ## Florida Medical Faculty Certificate (MFC) — §458.3145
 
 **Natureza:** licença médica restrita ao escopo do faculty appointment em uma das 12 instituições aprovadas: UF, USF, UM Sylvester, FSU, FIU, FAU, UCF, Nova Southeastern, Johns Hopkins All Children's (St. Pete), Mayo Clinic Jacksonville, Lake Erie COM, Burrell COM (Melbourne). Válida 2 anos, renovável enquanto o appointment durar.
@@ -465,9 +496,9 @@ export const COUNCILS = [
 
 **EB-2 NIW approval rate colapsou:** ~95% (FY 2022) → ~36-55% (FY 2025). **EB-1A virou a aposta mais segura** para physician-scientists com track record sólido (publicações, citações, awards).
 
-**USMLE Step 2 CK passing score:** subiu de 214 → **218** em 1/Jul/2025. Step 1 IMG pass rate 2025: 72% (first-time 75%, repeat 54%).
+**USMLE Step 2 CK passing score:** subiu de 214 → **218** em 1/Jul/2025. Step 1 IMG pass rate 2025: 72% (first-time 75%, repeat 54%). **MAS: USMLE NÃO É REQUISITO para Florida MFC.**
 
-**OET Medicine virou universal** para 2026 ECFMG Pathway applicants — substituiu citizenship/native-speaker waivers.
+**OET Medicine virou universal** para 2026 ECFMG Pathway applicants — substituiu citizenship/native-speaker waivers. **MAS: ECFMG não é necessário para Florida MFC.**
 
 **ECFMG → Intealth merger.** USMLE registration split via FSMB portal (Jan 2026).
 
