@@ -51,11 +51,11 @@ export async function POST(req) {
     if (isPresident) {
       if (isPromptAdvisor) systemPrompt = buildPromptAdvisorPresidentSystemPrompt();
       else if (isPersonaBoard) systemPrompt = buildPersonaBoardPresidentSystemPrompt();
-      else systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples });
+      else systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase });
     } else {
       if (isPromptAdvisor) systemPrompt = buildPromptAdvisorSystemPrompt({ counselorName: counselor.name, role: persona.role, brief: persona.brief });
       else if (isPersonaBoard) systemPrompt = buildPersonaBoardSystemPrompt({ role: persona.role, brief: persona.brief });
-      else systemPrompt = buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: counselor.name, role: persona.role, brief: persona.brief, boardPrinciples: council.boardPrinciples });
+      else systemPrompt = buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: counselor.name, role: persona.role, brief: persona.brief, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase });
     }
 
     // Monta histórico: user question → respostas anteriores (cada uma como assistant)

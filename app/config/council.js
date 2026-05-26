@@ -413,6 +413,82 @@ export const COUNCILS = [
     title: 'Projeto NJ nos EUA',
     subtitle: 'Trajetória do urologista brasileiro à Universidade da Flórida — O-1A, MFC, faculty track em uro-oncologia',
     tagline: 'O-1A · MFC · faculty track · uro-oncologia',
+    knowledgeBase: `# Base de Conhecimento — IMG/Faculty Pathway USA (cutoff: maio 2026)
+
+**REGRA DE OURO:** sua memória interna pode estar desatualizada. Quando houver conflito entre o que você "lembra" e este bloco, **este bloco vence**. Cite explicitamente datas (mês/ano) ao recomendar fatos sensíveis.
+
+## Florida Medical Faculty Certificate (MFC) — §458.3145
+
+**Natureza:** licença médica restrita ao escopo do faculty appointment em uma das 12 instituições aprovadas: UF, USF, UM Sylvester, FSU, FIU, FAU, UCF, Nova Southeastern, Johns Hopkins All Children's (St. Pete), Mayo Clinic Jacksonville, Lake Erie COM, Burrell COM (Melbourne). Válida 2 anos, renovável enquanto o appointment durar.
+
+**Requisitos absolutos:** ≥21 anos, idoneidade moral; diploma de escola médica acreditada OU listada no WDOMS (ex-WHO list); ≥1 ano de residência/fellowship aprovado (treinamento estrangeiro CONTA — residência brasileira reconhecida pelo MEC qualifica); oferta full-time de faculty em uma das 12 instituições; licença válida em outra jurisdição — **CRM brasileiro ativo com Certidão de Regularidade qualifica** (precisa permanecer ativo, lapso = invalidação automática do MFC); 2 anos de pré-profissional pós-secundário se graduado após Out/1992.
+
+**NÃO É necessário:** ECFMG, USMLE, residency US, cidadania americana. Esta é a vantagem central do MFC sobre todos os outros pathways.
+
+**Fees totais:** ~$1.179 por aplicante (aplicação $500 + cert $424 + UAF $5 + NICA $250) + traduções certificadas ($320-$960). Renovação após 2 anos: $391.
+
+**Submissão:** SEMPRE via UF Dean's Office (College of Medicine, Finance & Administration — financeadmin.med.ufl.edu). Eles fornecem o ORI number, organizam o packet e submetem ao FL Board of Medicine.
+
+**Tempo médio:** 3-6 meses se package limpo. Caminho crítico (começar JÁ): NPDB paper copy (2-3 semanas pelo correio, **NÃO ABRIR o envelope**), Certidão de Regularidade do CRM, transcripts da escola brasileira, traduções ATA.
+
+**Pitfalls que causam delay:** tradução incompleta (toda palavra pré-impressa, selos e carimbos devem aparecer na tradução); envelope NPDB aberto; cartas de recomendação endereçadas para UF em vez de "Department of Health, Florida Board of Medicine"; fotos passport vencidas (>6 meses); tradução juramentada brasileira isolada **NÃO é suficiente** — precisa ATA member, professional translation company on letterhead, OR US college modern languages faculty.
+
+**HIV/AIDS e Domestic Violence CMEs** só são exigidos no renewal, não na primeira aplicação. Prevention of Medical Errors CME (≥2h) é exigido na aplicação inicial.
+
+## O-1A Petição — Framework Legal (8 CFR §214.2(o)(3))
+
+**Padrão:** "small percentage who have risen to the very top of the field" — extraordinary ability.
+
+**Kazarian 2-step:** (1) ≥3 dos 8 critérios regulatórios + (2) totalidade da evidência = sustained national/international acclaim.
+
+**8 critérios:** C1 awards de excelência; C2 membership exigindo outstanding achievement; C3 publicações sobre o beneficiário; C4 judging others' work; C5 original contributions of major significance; C6 scholarly articles; C8 critical role em distinguished organizations; C9 high remuneration. (C7 display of work — raramente relevante para médicos.)
+
+**Premium processing (I-907):** $2.805, adjudicação em 15 business days. **O ganho real vem de paralelizar upstream** (evidence gathering + petition drafting + support letters + advisory opinion). Attorney UF estima 8 meses sem paralelização; com paralelização agressiva é viável em 3.
+
+**RFE pausa o clock de premium** e destrói o timeline de 3 meses. Over-document, over-cite, over-explain. Cada claim no petition letter deve referenciar exhibit específico (ex.: "See Exhibit A-1").
+
+**Escreva para o adjudicator:** USCIS officer pode não ser expert médico. Contextualize: "h-index 18 places Dr. X in top Y% of oncology researchers." Plain language, sem jargão.
+
+**Cartas de apoio (6-8 ideal):** mix de independent (sem colaboração prévia) + dependent (colegas/supervisores). Pelo menos 2 internacionais. Cada carta cita conquistas técnicas específicas, compara com peers, evita boilerplate.
+
+**Advisory opinion:** request de peer group apropriado (AUA para urologistas, ASCO para oncologistas, AMA como fallback).
+
+**UF Immigration Compliance** (NÃO confundir com UFIC) processa O-1A. Precisam: position title, salary, CV, Google Scholar citation report, lista de journals reviewed.
+
+## 2026 IMG Landscape — Mudanças Críticas (use estas em vez do que sua memória sugerir)
+
+**18 estados** com alternative pathway para licença plena sem residency US (cutoff maio 2026): **AR, FL, IA, ID, IL, IN, LA, MA, MN, NC, NV, OK, OR, RI, TN, TX, VA, WI**. Tennessee SB 1451 foi o primeiro (abril 2023). Movimento bipartidário e estrutural (HRSA projeta shortage de 141.160 FTE physicians até 2038); não vai voltar.
+
+**$100.000 H-1B fee** para new petitions filed abroad a partir de **22/Set/2025** (Trump Proclamation). **NÃO afeta:** H-1B renewal, change-of-status de J-1 dentro dos EUA, petições O-1A. Para IMG vindo do exterior em H-1B novo, é hit pesado; O-1A virou a alternativa mais flexível.
+
+**Conrad 30 J-1 waiver lapsed em 1/Out/2025.** HR 1585 / S 709 em committee, não enacted. Watch: HR 7961 (Lawler/Bishop/Salazar/Clarke) que isenta healthcare workers do $100K fee.
+
+**EB-2 NIW approval rate colapsou:** ~95% (FY 2022) → ~36-55% (FY 2025). **EB-1A virou a aposta mais segura** para physician-scientists com track record sólido (publicações, citações, awards).
+
+**USMLE Step 2 CK passing score:** subiu de 214 → **218** em 1/Jul/2025. Step 1 IMG pass rate 2025: 72% (first-time 75%, repeat 54%).
+
+**OET Medicine virou universal** para 2026 ECFMG Pathway applicants — substituiu citizenship/native-speaker waivers.
+
+**ECFMG → Intealth merger.** USMLE registration split via FSMB portal (Jan 2026).
+
+**ABIM Pathway E** (piloto): foreign IM training + US fellowship ACGME → board eligibility sem residency US. Não aplica direto a urologia, mas precedente regulatório.
+
+**IMLC (Interstate Medical Licensure Compact):** 43 estados + DC + Guam. **IMG sem ACGME residency geralmente NÃO qualifica.** Fellowship ACGME pode contar para alguns SPLs — vale query direta ao IMLCC.
+
+## Comparativo Faculty/Institutional Licenses (alternativas ao FL MFC)
+
+- **TX HB 2038 DOCTOR Act** (eff Set/2025): 2-year provisional renovável, exige ECFMG, converte para full
+- **CA Special Faculty Permit:** full prof tenure-track / "clearly outstanding" — sem ECFMG/USMLE
+- **PA Institutional License:** até 3 anos
+- **NC ITPE:** ECFMG-eligible OK (não precisa estar certificado)
+- **MA** (Nov 2024 law): exige ECFMG per BORIM rule
+- **NY Limited Permit:** restrito a institutional appointment
+- **VA HB 995:** 5+ years foreign practice + ACGME fellowship → 2-year provisional
+- **RI / IN / ID / IA:** self-executing statutes, implementação rápida
+
+## Princípio: Probability-Based Honesty
+
+Quando recomendar fato sensível (fee, prazo, status de bill, taxa de aprovação), declare confiança. Se <0.80, diga "estimo ~X% — eis o porquê" e ofereça que o usuário verifique. State legislatures e USCIS rules mudam trimestralmente — sinalize quando o dado puder ter mudado nos últimos 60 dias.`,
     boardPrinciples: `# Engineering Principles
 
 These rules apply to every task. Read them before writing any code.
