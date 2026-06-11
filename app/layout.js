@@ -1,14 +1,23 @@
+// app/layout.js
+import './globals.css';
+
 export const metadata = {
-  title: 'Board of Life',
-  description: 'Seus 6 conselheiros de IA para qualquer decisão importante.'
+  title: 'Life Board — Strategic AI Council',
+  description: 'Conselho estratégico de 6 IAs deliberando em sequência. Você decide.',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR">
-      <body style={{ margin: 0, fontFamily: 'Inter, Arial, sans-serif', background: '#f7f7fb' }}>
-        {children}
-      </body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500&family=Geist:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>{children}</body>
     </html>
   );
 }
