@@ -15,14 +15,13 @@ export default function SignUpPage() {
   const [error, setError]         = useState('')
   const [loading, setLoading]     = useState(false)
   const [done, setDone]           = useState(false)
-  const supabase = createBrowserSupabaseClient()
-
   async function submit(e) {
     e.preventDefault()
     if (password !== confirm) { setError('Passwords do not match'); return }
     if (password.length < 8)  { setError('Password must be at least 8 characters'); return }
     setError('')
     setLoading(true)
+    const supabase = createBrowserSupabaseClient()
     const { error: err } = await supabase.auth.signUp({
       email,
       password,

@@ -12,12 +12,11 @@ function SignInForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const supabase = createBrowserSupabaseClient()
-
   async function submit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
+    const supabase = createBrowserSupabaseClient()
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) { setError(err.message); setLoading(false); return }
     router.push(next)
