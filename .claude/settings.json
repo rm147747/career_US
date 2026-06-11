@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, json, os\ntry:\n    d = json.load(sys.stdin)\nexcept Exception:\n    sys.exit(0)\npath = d.get('file_path', d.get('path', ''))\nif any(path.endswith(s) for s in ['.env', '.env.local', '.env.production', '.env.development']):\n    print('BLOCKED: Editar .env direto e perigoso. Use .env.example para documentar novas vars e configure no Vercel Dashboard ou .env.local (nao commitar).', file=sys.stderr)\n    sys.exit(2)\n\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, json, re\ntry:\n    d = json.load(sys.stdin)\nexcept Exception:\n    sys.exit(0)\npath = d.get('file_path', d.get('path', ''))\ncontent = d.get('new_string', d.get('content', ''))\nif re.search(r'(billing|credits|webhook)', path) and re.search(r'delta', content):\n    deltas = re.findall(r'delta[^,\\n}]+', content)\n    for delta in deltas:\n        nums = re.findall(r'[-+]?\\d+', delta)\n        for n in nums:\n            if int(n) > 0 and 'purchase' not in content.lower() and 'signup' not in content.lower() and 'bonus' not in content.lower():\n                print(f'AVISO BILLING: delta positivo ({n}) detectado em arquivo de billing. Debitos devem ser negativos. Verifique se isso esta correto antes de continuar.', file=sys.stderr)\n                break\n\""
+          }
+        ]
+      }
+    ]
+  }
+}
