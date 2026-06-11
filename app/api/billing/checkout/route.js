@@ -1,7 +1,5 @@
 import Stripe from 'stripe'
-import { createServerSupabaseClient } from '../../../../lib/supabase'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+import { createServerSupabaseClient } from '../../../lib/supabase.server'
 
 const PACKAGES = {
   credits_10:  { credits: 10,  priceEnv: 'STRIPE_PRICE_10'  },
@@ -10,6 +8,7 @@ const PACKAGES = {
 }
 
 export async function POST(req) {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
   const supabase = await createServerSupabaseClient()
   const { data: { user }, error: authErr } = await supabase.auth.getUser()
   if (authErr || !user) return Response.json({ error: 'Unauthorized' }, { status: 401 })

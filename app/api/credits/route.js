@@ -1,6 +1,6 @@
 // GET  — current balance for authenticated user
 // POST — deduct N credits (atomic check + insert)
-import { createServerSupabaseClient } from '../../../lib/supabase'
+import { createServerSupabaseClient } from '../../lib/supabase.server'
 import { createClient } from '@supabase/supabase-js'
 
 function adminClient() {

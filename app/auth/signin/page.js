@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createBrowserSupabaseClient } from '../../lib/supabase'
 
-export default function SignInPage() {
+function SignInForm() {
   const router = useRouter()
   const params = useSearchParams()
   const next = params.get('next') || '/'
@@ -25,30 +25,38 @@ export default function SignInPage() {
   }
 
   return (
+    <div style={card}>
+      <h1 style={title}>Life Board</h1>
+      <p style={subtitle}>Sign in to your account</p>
+      <form onSubmit={submit} style={form}>
+        <label style={label}>
+          Email
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            required autoComplete="email" style={input} />
+        </label>
+        <label style={label}>
+          Password
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            required autoComplete="current-password" style={input} />
+        </label>
+        {error && <p style={err}>{error}</p>}
+        <button type="submit" disabled={loading} style={btn}>
+          {loading ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
+      <p style={footer}>
+        No account? <a href="/auth/signup" style={link}>Create one</a>
+      </p>
+    </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
     <div style={page}>
-      <div style={card}>
-        <h1 style={title}>Life Board</h1>
-        <p style={subtitle}>Sign in to your account</p>
-        <form onSubmit={submit} style={form}>
-          <label style={label}>
-            Email
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-              required autoComplete="email" style={input} />
-          </label>
-          <label style={label}>
-            Password
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-              required autoComplete="current-password" style={input} />
-          </label>
-          {error && <p style={err}>{error}</p>}
-          <button type="submit" disabled={loading} style={btn}>
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-        <p style={footer}>
-          No account? <a href="/auth/signup" style={link}>Create one</a>
-        </p>
-      </div>
+      <Suspense fallback={<div style={card}><p style={subtitle}>Loading…</p></div>}>
+        <SignInForm />
+      </Suspense>
     </div>
   )
 }
