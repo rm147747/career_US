@@ -6,10 +6,18 @@ const PROTECTED = ['/session', '/dashboard', '/history']
 export async function middleware(request) {
   let response = NextResponse.next({ request })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // Without Supabase config, auth cannot work — fail open so the site stays up
+  // instead of crashing every request with MIDDLEWARE_INVOCATION_FAILED.
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return response
+  }
+
+  let user = null
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
@@ -20,10 +28,14 @@ export async function middleware(request) {
           )
         },
       },
-    },
-  )
+    })
+    const { data } = await supabase.auth.getUser()
+    user = data?.user ?? null
+  } catch {
+    // Supabase unreachable or misconfigured — treat as signed out rather than 500.
+    return response
+  }
 
-  const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
 
   const isProtected = PROTECTED.some((p) => path.startsWith(p))
