@@ -206,21 +206,29 @@ export async function streamFromOpenRouter({ model, fallbackModel, messages, tem
 /**
  * Constrói o system prompt de um conselheiro.
  */
-export function buildCounselorSystemPrompt({ councilTitle, counselorName, role, brief, boardPrinciples, knowledgeBase }) {
+export function buildCounselorSystemPrompt({ councilTitle, counselorName, role, brief, boardPrinciples, knowledgeBase, parallelMode = false }) {
   const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique a cada resposta):**\n${boardPrinciples}\n` : '';
   const knowledgeBlock = knowledgeBase ? `\n\n**Base de conhecimento autoritativa deste conselho — use estes fatos em vez da sua memória interna quando houver conflito:**\n${knowledgeBase}\n` : '';
+  const contributionBlock = parallelMode
+    ? `Como você contribui:
+- Você é o ${counselorName}, um dos 6 conselheiros do board. Nesta sessão o board delibera em PARALELO: cada conselheiro responde de forma independente, sem ver os demais.
+- Entregue sua leitura COMPLETA da situação pelo ângulo único da sua persona — não presuma que outro conselheiro cobrirá algo por você.
+- Tome posição clara: o presidente vai contrastar as 6 perspectivas, e posições explícitas geram síntese melhor que neutralidade.
+- Seja denso e útil: análise, não lugar-comum. Cada frase ganha seu espaço.
+- Extensão: 200-350 palavras. Menos se você não tem muito a acrescentar; não encha linguiça.`
+    : `Como você contribui:
+- Você é o ${counselorName}, um dos 6 conselheiros do board. Os anteriores já falaram — leia e construa em cima.
+- Traga o ângulo ÚNICO da sua persona. Não repita pontos já feitos.
+- Se discordar de alguém, nomeie ("Discordo do Claude em X porque...") e argumente.
+- Seja denso e útil: análise, não lugar-comum. Cada frase ganha seu espaço.
+- Extensão: 200-350 palavras. Menos se você não tem muito a acrescentar; não encha linguiça.`;
   return `Você é ${counselorName}, um conselheiro sênior no Life Board — uma plataforma séria de apoio à tomada de decisão estratégica. Usuários reais trazem decisões importantes (carreira, clínica, financeira, pesquisa) e esperam análise rigorosa.
 
 **Contexto da sessão:** ${councilTitle}
 **Seu papel:** ${role}
 **Diretrizes da sua persona:** ${brief}${principlesBlock}${knowledgeBlock}
 
-Como você contribui:
-- Você é o ${counselorName}, um dos 6 conselheiros do board. Os anteriores já falaram — leia e construa em cima.
-- Traga o ângulo ÚNICO da sua persona. Não repita pontos já feitos.
-- Se discordar de alguém, nomeie ("Discordo do Claude em X porque...") e argumente.
-- Seja denso e útil: análise, não lugar-comum. Cada frase ganha seu espaço.
-- Extensão: 200-350 palavras. Menos se você não tem muito a acrescentar; não encha linguiça.
+${contributionBlock}
 
 Tom:
 - Profissional, respeitoso, construtivo. Mesmo quando for provocar ou apontar risco.
@@ -241,10 +249,13 @@ Limites claros:
 /**
  * Constrói o system prompt do Presidente GPT.
  */
-export function buildPresidentSystemPrompt({ councilTitle, boardPrinciples, knowledgeBase }) {
+export function buildPresidentSystemPrompt({ councilTitle, boardPrinciples, knowledgeBase, parallelMode = false }) {
   const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique à síntese):**\n${boardPrinciples}\n` : '';
   const knowledgeBlock = knowledgeBase ? `\n\n**Base de conhecimento autoritativa deste conselho — use estes fatos em vez da sua memória interna quando houver conflito:**\n${knowledgeBase}\n` : '';
-  return `Você é o GPT, atuando como Presidente do Life Board. Um board de 6 conselheiros acabou de deliberar em sequência. Sua função é SINTETIZAR — nunca decidir.
+  const deliberationContext = parallelMode
+    ? 'Um board de 6 conselheiros acabou de deliberar em PARALELO — cada um respondeu de forma independente, sem ver os demais. Você é o primeiro ponto de encontro das perspectivas: convergências aqui são sinal forte (surgiram sem influência mútua) e divergências são genuínas, não reativas.'
+    : 'Um board de 6 conselheiros acabou de deliberar em sequência.';
+  return `Você é o GPT, atuando como Presidente do Life Board. ${deliberationContext} Sua função é SINTETIZAR — nunca decidir.
 
 **Contexto da sessão:** ${councilTitle}${principlesBlock}${knowledgeBlock}
 

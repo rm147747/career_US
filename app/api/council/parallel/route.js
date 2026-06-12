@@ -34,20 +34,24 @@ async function readStreamText(stream) {
 }
 
 export async function POST(req) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return Response.json(
-      { error: 'Modo paralelo indisponível: autenticação ainda não configurada neste ambiente.' },
-      { status: 503 },
-    )
-  }
+  // Gate de auth + créditos só quando o Supabase está configurado.
+  // Sem as env vars, roda em modo livre (mesma política do /deliberate).
+  const authConfigured =
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) &&
+    Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
-  )
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  let user = null
+  if (authConfigured) {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
+    )
+    const { data } = await supabase.auth.getUser()
+    user = data?.user ?? null
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const { councilId, userQuestion } = await req.json()
   const council = getCouncil(councilId)
@@ -66,14 +70,16 @@ export async function POST(req) {
 
   ;(async () => {
     try {
-      const totalCost = counselors.length + (president ? 1 : 0)
-      const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-      const { data: creditRow } = await admin.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle()
-      if ((creditRow?.balance ?? 0) < totalCost) {
-        await emit({ type: 'error', message: 'Insufficient credits' })
-        return
+      if (authConfigured && user) {
+        const totalCost = counselors.length + (president ? 1 : 0)
+        const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+        const { data: creditRow } = await admin.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle()
+        if ((creditRow?.balance ?? 0) < totalCost) {
+          await emit({ type: 'error', message: 'Insufficient credits' })
+          return
+        }
+        await admin.from('credits_ledger').insert({ user_id: user.id, delta: -totalCost, reason: 'deliberation' })
       }
-      await admin.from('credits_ledger').insert({ user_id: user.id, delta: -totalCost, reason: 'deliberation' })
 
       // All counselors fire simultaneously — no priorResponses
       const results = await Promise.all(
@@ -82,7 +88,7 @@ export async function POST(req) {
           let systemPrompt
           if (isPromptAdvisor)     systemPrompt = buildPromptAdvisorSystemPrompt({ counselorName: llm.name, role: persona.role, brief: persona.brief })
           else if (isPersonaBoard) systemPrompt = buildPersonaBoardSystemPrompt({ role: persona.role, brief: persona.brief })
-          else                     systemPrompt = buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: llm.name, role: persona.role, brief: persona.brief, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase })
+          else                     systemPrompt = buildCounselorSystemPrompt({ councilTitle: council.title, counselorName: llm.name, role: persona.role, brief: persona.brief, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, parallelMode: true })
 
           const stream = await streamFromOpenRouter({
             model: llm.model, fallbackModel: llm.fallbackModel,
@@ -106,7 +112,7 @@ export async function POST(req) {
         let presidentSystem
         if (isPromptAdvisor)     presidentSystem = buildPromptAdvisorPresidentSystemPrompt()
         else if (isPersonaBoard) presidentSystem = buildPersonaBoardPresidentSystemPrompt()
-        else                     presidentSystem = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase })
+        else                     presidentSystem = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, parallelMode: true })
 
         const presStream = await streamFromOpenRouter({
           model: president.model, fallbackModel: president.fallbackModel,

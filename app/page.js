@@ -655,7 +655,7 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
               <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-faint)' }}>
                 {mode === 'sequential'
                   ? 'Cada conselheiro lê os anteriores e constrói em cima.'
-                  : 'Todos respondem ao mesmo tempo, sem influência mútua. Requer login.'}
+                  : 'Todos respondem ao mesmo tempo, sem influência mútua.'}
               </div>
             </div>
 
