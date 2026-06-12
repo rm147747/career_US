@@ -15,19 +15,35 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'edge'
 
+// streamFromOpenRouter emite pares `event: <nome>` + `data: {...}` —
+// o buffer carrega linhas partidas entre chunks.
 async function readStreamText(stream) {
   const reader = stream.getReader()
   const dec = new TextDecoder()
   let text = ''
+  let buffer = ''
+  let currentEvent = null
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    for (const line of dec.decode(value, { stream: true }).split('\n')) {
-      if (!line.startsWith('data: ')) continue
-      try {
-        const d = JSON.parse(line.slice(6))
-        if (d.type === 'delta') text += d.text
-      } catch { /* non-JSON SSE line */ }
+    buffer += dec.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        currentEvent = line.slice(6).trim()
+      } else if (line.startsWith('data:')) {
+        const raw = line.slice(5).trim()
+        if (!raw) continue
+        try {
+          const d = JSON.parse(raw)
+          if (currentEvent === 'delta' && d.text) text += d.text
+          else if (currentEvent === 'error') throw new Error(d.error || 'stream error')
+        } catch (e) {
+          if (e instanceof SyntaxError) continue // chunk malformado
+          throw e
+        }
+      }
     }
   }
   return text
@@ -126,16 +142,26 @@ export async function POST(req) {
 
         const reader = presStream.getReader()
         const dec = new TextDecoder()
+        let presBuffer = ''
+        let presEvent = null
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-          for (const line of dec.decode(value, { stream: true }).split('\n')) {
-            if (!line.startsWith('data: ')) continue
-            try {
-              const d = JSON.parse(line.slice(6))
-              if (d.type === 'delta') await emit({ type: 'president_delta', text: d.text })
-              else if (d.type === 'done') await emit({ type: 'president_done' })
-            } catch { /* skip */ }
+          presBuffer += dec.decode(value, { stream: true })
+          const lines = presBuffer.split('\n')
+          presBuffer = lines.pop() || ''
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              presEvent = line.slice(6).trim()
+            } else if (line.startsWith('data:')) {
+              const raw = line.slice(5).trim()
+              if (!raw) continue
+              try {
+                const d = JSON.parse(raw)
+                if (presEvent === 'delta' && d.text) await emit({ type: 'president_delta', text: d.text })
+                else if (presEvent === 'done') await emit({ type: 'president_done' })
+              } catch { /* chunk malformado */ }
+            }
           }
         }
       }
