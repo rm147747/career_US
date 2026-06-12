@@ -10,6 +10,18 @@ const hasSupabaseConfig =
 export default function AuthNav() {
   const [user, setUser] = useState(null);
   const [supabase, setSupabase] = useState(null);
+  const [balance, setBalance] = useState(null);
+
+  useEffect(() => {
+    if (!user) {
+      setBalance(null);
+      return;
+    }
+    fetch('/api/credits')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBalance(d?.balance ?? null))
+      .catch(() => setBalance(null));
+  }, [user]);
 
   useEffect(() => {
     if (!hasSupabaseConfig) return;
@@ -41,7 +53,15 @@ export default function AuthNav() {
   if (user) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span className="chip" title={user.email}>{user.email}</span>
+        <a
+          className="chip"
+          href="/billing"
+          style={{ textDecoration: 'none' }}
+          title="Comprar créditos"
+        >
+          {balance !== null ? `${balance} créditos` : 'créditos'}
+        </a>
+        <span className="chip hide-mobile" title={user.email}>{user.email}</span>
         <button className="btn-ghost" style={{ fontSize: 14 }} onClick={handleSignOut}>
           Sair
         </button>

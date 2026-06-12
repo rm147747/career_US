@@ -7,6 +7,7 @@ import { Icon, ArrowRight, ArrowUpRight, ArrowLeft, InfoIcon, CloseIcon, ChatIco
 import { AttachmentUploader, buildAttachmentsBlock } from './components/AttachmentUploader';
 import AuthNav from './components/AuthNav';
 import { streamPost } from './lib/sse-client';
+import { streamParallel } from './lib/parallel-client';
 import { renderMarkdown, calculateDivergence, divergenceLabel } from './lib/utils';
 
 // ═══════════════════════════════════════════════════════════
@@ -19,6 +20,7 @@ export default function LifeBoard() {
   const [counselors, setCounselors] = useState([]); // working copy with role/brief from selected council
   const [userQuestion, setUserQuestion] = useState('');
   const [setupAttachments, setSetupAttachments] = useState([]); // anexos da pergunta inicial
+  const [deliberationMode, setDeliberationMode] = useState('sequential'); // 'sequential' | 'parallel'
 
   // Session state
   const [responses, setResponses] = useState([]); // [{ llm, name, role, color, text, citations, isPresident, streaming }]
@@ -87,6 +89,11 @@ export default function LifeBoard() {
       done: false,
     }));
     setResponses(initial);
+
+    if (deliberationMode === 'parallel') {
+      await runParallelSession(enrichedQuestion, initial);
+      return;
+    }
 
     // roda sequencial
     for (let i = 0; i < counselors.length; i++) {
@@ -159,6 +166,59 @@ export default function LifeBoard() {
     }
 
     setCurrentStep(counselors.length); // step 8: turno do usuário
+    setIsDone(true);
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // Modo paralelo: 6 conselheiros simultâneos, sem influência
+  // mútua; presidente sintetiza no final. Requer login + créditos.
+  // ═══════════════════════════════════════════════════════
+
+  const runParallelSession = async (enrichedQuestion, initial) => {
+    const presIdx = initial.findIndex((r) => r.isPresident);
+
+    // todos os conselheiros (exceto presidente) deliberam ao mesmo tempo
+    setResponses(initial.map((r) => ({ ...r, streaming: !r.isPresident })));
+
+    try {
+      await streamParallel(
+        { councilId: currentCouncil.id, userQuestion: enrichedQuestion },
+        {
+          onCounselor: (ev) => {
+            setResponses((prev) =>
+              prev.map((r, i) => {
+                if (r.llm !== ev.counselorId) return r;
+                accumulatedText.current[i] = ev.text;
+                return { ...r, text: ev.text, streaming: false, done: true };
+              })
+            );
+          },
+          onPresidentDelta: (text) => {
+            if (presIdx < 0) return;
+            setResponses((prev) => {
+              const next = [...prev];
+              const updated = { ...next[presIdx], streaming: true, text: (next[presIdx].text || '') + text };
+              accumulatedText.current[presIdx] = updated.text;
+              next[presIdx] = updated;
+              return next;
+            });
+          },
+          onPresidentDone: () => {
+            if (presIdx < 0) return;
+            setResponses((prev) => {
+              const next = [...prev];
+              next[presIdx] = { ...next[presIdx], streaming: false, done: true };
+              return next;
+            });
+          },
+          onError: (err) => setSessionError(err.message),
+        }
+      );
+    } catch (err) {
+      setSessionError(err.message);
+    }
+
+    setCurrentStep(counselors.length);
     setIsDone(true);
   };
 
@@ -296,6 +356,8 @@ export default function LifeBoard() {
           setAttachments={setSetupAttachments}
           onBack={goHome}
           onStart={startSession}
+          mode={deliberationMode}
+          setMode={setDeliberationMode}
         />
       )}
       {screen === 'session' && currentCouncil && (
@@ -448,7 +510,7 @@ function HomeScreen({ onSelectCouncil }) {
 // SETUP SCREEN
 // ═══════════════════════════════════════════════════════════
 
-function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, attachments, setAttachments, onBack, onStart }) {
+function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, attachments, setAttachments, onBack, onStart, mode, setMode }) {
   const updateCounselor = (idx, field, value) => {
     const next = [...counselors];
     next[idx] = { ...next[idx], [field]: value };
@@ -570,6 +632,33 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
               <AttachmentUploader attachments={attachments} setAttachments={setAttachments} />
             </div>
 
+            <div style={{ marginTop: 16 }}>
+              <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 8 }}>
+                Modo de deliberação
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className={mode === 'sequential' ? 'chip active' : 'chip'}
+                  style={{ cursor: 'pointer', flex: 1, justifyContent: 'center' }}
+                  onClick={() => setMode('sequential')}
+                >
+                  Sequencial
+                </button>
+                <button
+                  className={mode === 'parallel' ? 'chip active' : 'chip'}
+                  style={{ cursor: 'pointer', flex: 1, justifyContent: 'center' }}
+                  onClick={() => setMode('parallel')}
+                >
+                  Paralelo
+                </button>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-faint)' }}>
+                {mode === 'sequential'
+                  ? 'Cada conselheiro lê os anteriores e constrói em cima.'
+                  : 'Todos respondem ao mesmo tempo, sem influência mútua. Requer login.'}
+              </div>
+            </div>
+
             <button
               onClick={onStart}
               disabled={!userQuestion.trim() || attachments.some((a) => a.status === 'processing')}
@@ -581,7 +670,7 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
 
             <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <InfoIcon />
-              Deliberação leva ~2-4 min em sequência
+              {mode === 'sequential' ? 'Deliberação leva ~2-4 min em sequência' : 'Modo paralelo: ~1-2 min, todos simultâneos'}
             </div>
           </aside>
         </div>
