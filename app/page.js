@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { COUNCILS, LLMS, getCouncil } from './config/council';
 import { Icon, ArrowRight, ArrowUpRight, ArrowLeft, InfoIcon, CloseIcon, ChatIcon } from './components/Icons';
 import { AttachmentUploader, buildAttachmentsBlock } from './components/AttachmentUploader';
+import AuthNav from './components/AuthNav';
 import { streamPost } from './lib/sse-client';
 import { renderMarkdown, calculateDivergence, divergenceLabel } from './lib/utils';
 
@@ -359,7 +360,7 @@ function HomeScreen({ onSelectCouncil }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
             <span className="hide-mobile" style={{ fontSize: 14, color: 'var(--text-dim)' }}>Sessions</span>
             <span className="hide-mobile" style={{ fontSize: 14, color: 'var(--text-dim)' }}>Archive</span>
-            <button className="btn-ghost" style={{ fontSize: 14 }}>R · Dr. Brandão</button>
+            <AuthNav />
           </div>
         </div>
       </nav>
