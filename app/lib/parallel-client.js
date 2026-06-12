@@ -29,7 +29,11 @@ export async function streamParallel(body, handlers = {}) {
   }
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => '');
-    const err = new Error(`HTTP ${res.status}: ${text || 'stream vazio'}`);
+    let message = text || 'stream vazio';
+    try {
+      message = JSON.parse(text).error || message;
+    } catch { /* corpo não-JSON — usa texto cru */ }
+    const err = new Error(message);
     onError?.(err);
     throw err;
   }
