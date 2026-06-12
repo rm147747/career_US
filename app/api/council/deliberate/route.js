@@ -25,30 +25,40 @@ export const runtime = 'edge'
 
 export async function POST(req) {
   try {
-    // Auth
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
-    )
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
+    // Gate de auth + créditos só quando o Supabase está configurado.
+    // Sem as env vars, roda em modo livre (comportamento pré-comercial)
+    // em vez de derrubar a deliberação com 500.
+    const authConfigured =
+      Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
+      Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) &&
+      Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
 
-    // Credit check + deduct (service role bypasses RLS)
-    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-    const { data: creditRow } = await admin.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle()
-    if ((creditRow?.balance ?? 0) < 1) {
-      return new Response(JSON.stringify({ error: 'Insufficient credits' }), {
-        status: 402,
-        headers: { 'Content-Type': 'application/json' },
-      })
+    if (authConfigured) {
+      // Auth
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        { cookies: { getAll: () => req.cookies.getAll(), setAll: () => {} } },
+      )
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      // Credit check + deduct (service role bypasses RLS)
+      const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+      const { data: creditRow } = await admin.from('user_credits').select('balance').eq('user_id', user.id).maybeSingle()
+      if ((creditRow?.balance ?? 0) < 1) {
+        return new Response(JSON.stringify({ error: 'Insufficient credits' }), {
+          status: 402,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      await admin.from('credits_ledger').insert({ user_id: user.id, delta: -1, reason: 'deliberation' })
     }
-    await admin.from('credits_ledger').insert({ user_id: user.id, delta: -1, reason: 'deliberation' })
 
     const { councilId, counselorId, userQuestion, priorResponses = [] } = await req.json()
 
