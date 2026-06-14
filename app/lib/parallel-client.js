@@ -14,9 +14,21 @@
  * @param {object} handlers { onCounselor, onPresidentDelta, onPresidentDone, onComplete, onError }
  */
 export async function streamParallel(body, handlers = {}) {
-  const { onCounselor, onPresidentDelta, onPresidentDone, onComplete, onError } = handlers;
+  return streamBoardSSE('/api/council/parallel', body, handlers);
+}
 
-  const res = await fetch('/api/council/parallel', {
+/**
+ * Consome o stream do modo híbrido (/api/council/hybrid). Mesmos eventos do
+ * paralelo + `critique { counselorId, name, role, text }` na rodada 2.
+ */
+export async function streamHybrid(body, handlers = {}) {
+  return streamBoardSSE('/api/council/hybrid', body, handlers);
+}
+
+async function streamBoardSSE(endpoint, body, handlers = {}) {
+  const { onCounselor, onCritique, onPresidentDelta, onPresidentDone, onComplete, onError } = handlers;
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -65,6 +77,9 @@ export async function streamParallel(body, handlers = {}) {
       switch (payload.type) {
         case 'counselor':
           onCounselor?.(payload);
+          break;
+        case 'critique':
+          onCritique?.(payload);
           break;
         case 'president_delta':
           onPresidentDelta?.(payload.text || '');

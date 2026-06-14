@@ -7,7 +7,7 @@ import { Icon, ArrowRight, ArrowUpRight, ArrowLeft, InfoIcon, CloseIcon, ChatIco
 import { AttachmentUploader, buildAttachmentsBlock } from './components/AttachmentUploader';
 import AuthNav from './components/AuthNav';
 import { streamPost } from './lib/sse-client';
-import { streamParallel } from './lib/parallel-client';
+import { streamParallel, streamHybrid } from './lib/parallel-client';
 import { renderMarkdown, calculateDivergence, divergenceLabel } from './lib/utils';
 
 // ═══════════════════════════════════════════════════════════
@@ -93,8 +93,7 @@ export default function LifeBoard() {
         body: JSON.stringify({ userQuestion: enrichedQuestion }),
       });
       const d = await res.json();
-      // Híbrido ainda não tem orquestração própria — roda como paralelo por ora.
-      const runAs = d.mode === 'sequential' ? 'sequential' : 'parallel';
+      const runAs = ['sequential', 'parallel', 'hybrid'].includes(d.mode) ? d.mode : 'parallel';
 
       // Se o board quer entender melhor, abre a tela de esclarecimento antes.
       if (d.needsClarification && Array.isArray(d.clarifyingQuestions) && d.clarifyingQuestions.length) {
@@ -135,6 +134,10 @@ export default function LifeBoard() {
 
     if (resolvedMode === 'parallel') {
       await runParallelSession(enrichedQuestion, initial);
+      return;
+    }
+    if (resolvedMode === 'hybrid') {
+      await runHybridSession(enrichedQuestion, initial);
       return;
     }
 
@@ -233,6 +236,67 @@ export default function LifeBoard() {
                 if (r.llm !== ev.counselorId) return r;
                 accumulatedText.current[i] = ev.text;
                 return { ...r, text: ev.text, streaming: false, done: true };
+              })
+            );
+          },
+          onPresidentDelta: (text) => {
+            if (presIdx < 0) return;
+            setResponses((prev) => {
+              const next = [...prev];
+              const updated = { ...next[presIdx], streaming: true, text: (next[presIdx].text || '') + text };
+              accumulatedText.current[presIdx] = updated.text;
+              next[presIdx] = updated;
+              return next;
+            });
+          },
+          onPresidentDone: () => {
+            if (presIdx < 0) return;
+            setResponses((prev) => {
+              const next = [...prev];
+              next[presIdx] = { ...next[presIdx], streaming: false, done: true };
+              return next;
+            });
+          },
+          onError: (err) => setSessionError(err.message),
+        }
+      );
+    } catch (err) {
+      setSessionError(err.message);
+    }
+
+    setCurrentStep(counselors.length);
+    setIsDone(true);
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // Modo híbrido: rodada 1 paralela → rodada 2 de crítica cruzada
+  // (anexada ao card de cada conselheiro) → presidente sintetiza.
+  // ═══════════════════════════════════════════════════════
+
+  const runHybridSession = async (enrichedQuestion, initial) => {
+    const presIdx = initial.findIndex((r) => r.isPresident);
+    setResponses(initial.map((r) => ({ ...r, streaming: !r.isPresident })));
+
+    try {
+      await streamHybrid(
+        { councilId: currentCouncil.id, userQuestion: enrichedQuestion },
+        {
+          onCounselor: (ev) => {
+            setResponses((prev) =>
+              prev.map((r, i) => {
+                if (r.llm !== ev.counselorId) return r;
+                accumulatedText.current[i] = ev.text;
+                return { ...r, text: ev.text, streaming: true, done: false }; // ainda vem a crítica
+              })
+            );
+          },
+          onCritique: (ev) => {
+            setResponses((prev) =>
+              prev.map((r, i) => {
+                if (r.llm !== ev.counselorId) return r;
+                const merged = `${r.text}\n\n**↳ Crítica aos pares**\n${ev.text}`;
+                accumulatedText.current[i] = merged;
+                return { ...r, text: merged, streaming: false, done: true };
               })
             );
           },
