@@ -22,6 +22,7 @@ export default function LifeBoard() {
   const [setupAttachments, setSetupAttachments] = useState([]); // anexos da pergunta inicial
   const [deliberationMode, setDeliberationMode] = useState('auto'); // 'auto' | 'sequential' | 'parallel'
   const [dispatchInfo, setDispatchInfo] = useState(null); // { mode, reasoning } — escolha do DeepSeek
+  const [clarify, setClarify] = useState(null); // { baseQuestion, questions, mode, runAs, reasoning } — perguntas do board
 
   // Session state
   const [responses, setResponses] = useState([]); // [{ llm, name, role, color, text, citations, isPresident, streaming }]
@@ -67,36 +68,56 @@ export default function LifeBoard() {
       alert('Aguarde a extração dos anexos antes de convocar o board.');
       return;
     }
-    setScreen('session');
-    setResponses([]);
-    setCurrentStep(0);
-    setIsDone(false);
-    setSessionError(null);
-    setDispatchInfo(null);
 
     // Pergunta final = texto do usuário + bloco de anexos
     const attachmentsBlock = buildAttachmentsBlock(setupAttachments);
     const enrichedQuestion = userQuestion + attachmentsBlock;
 
-    // Modo automático: DeepSeek decide paralelo/sequencial/híbrido antes de deliberar.
-    let resolvedMode = deliberationMode;
-    if (deliberationMode === 'auto') {
-      setDispatchInfo({ loading: true });
-      try {
-        const res = await fetch('/api/council/dispatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userQuestion: enrichedQuestion }),
-        });
-        const d = await res.json();
-        // Híbrido ainda não tem orquestração própria — roda como paralelo por ora.
-        resolvedMode = d.mode === 'sequential' ? 'sequential' : 'parallel';
-        setDispatchInfo({ mode: d.mode, runAs: resolvedMode, reasoning: d.reasoning });
-      } catch {
-        resolvedMode = 'parallel';
-        setDispatchInfo({ mode: 'parallel', runAs: 'parallel', reasoning: 'Roteamento indisponível — usando paralelo.' });
-      }
+    // Modo manual: vai direto pra deliberação.
+    if (deliberationMode !== 'auto') {
+      setDispatchInfo(null);
+      await runDeliberation(enrichedQuestion, deliberationMode);
+      return;
     }
+
+    // Modo automático: DeepSeek decide o modo e se precisa esclarecer antes.
+    setScreen('session');
+    setResponses([]);
+    setSessionError(null);
+    setIsDone(false);
+    setDispatchInfo({ loading: true });
+    try {
+      const res = await fetch('/api/council/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userQuestion: enrichedQuestion }),
+      });
+      const d = await res.json();
+      // Híbrido ainda não tem orquestração própria — roda como paralelo por ora.
+      const runAs = d.mode === 'sequential' ? 'sequential' : 'parallel';
+
+      // Se o board quer entender melhor, abre a tela de esclarecimento antes.
+      if (d.needsClarification && Array.isArray(d.clarifyingQuestions) && d.clarifyingQuestions.length) {
+        setClarify({ baseQuestion: enrichedQuestion, questions: d.clarifyingQuestions, mode: d.mode, runAs, reasoning: d.reasoning });
+        setScreen('clarify');
+        return;
+      }
+
+      setDispatchInfo({ mode: d.mode, runAs, reasoning: d.reasoning });
+      await runDeliberation(enrichedQuestion, runAs);
+    } catch {
+      setDispatchInfo({ mode: 'parallel', runAs: 'parallel', reasoning: 'Roteamento indisponível — usando paralelo.' });
+      await runDeliberation(enrichedQuestion, 'parallel');
+    }
+  };
+
+  // Executa a deliberação no modo resolvido (parallel | sequential).
+  const runDeliberation = async (enrichedQuestion, resolvedMode) => {
+    setScreen('session');
+    setCurrentStep(0);
+    setIsDone(false);
+    setSessionError(null);
+    accumulatedText.current = [];
 
     // Placeholder response objects pra UI mostrar os cards desde já
     const initial = counselors.map((c) => ({
@@ -249,6 +270,31 @@ export default function LifeBoard() {
   useEffect(() => { accumulatedText.current = []; }, [userQuestion]);
 
   // ═══════════════════════════════════════════════════════
+  // Esclarecimento: usuário responde as perguntas do board e delibera
+  // ═══════════════════════════════════════════════════════
+
+  const submitClarification = async (answers) => {
+    if (!clarify) return;
+    const qa = clarify.questions
+      .map((q, i) => `P: ${q}\nR: ${(answers[i] || '').trim() || '(sem resposta)'}`)
+      .join('\n\n');
+    const finalQuestion = `${clarify.baseQuestion}\n\n**Esclarecimentos do usuário:**\n${qa}`;
+    const runAs = clarify.runAs;
+    setDispatchInfo({ mode: clarify.mode, runAs, reasoning: clarify.reasoning });
+    setClarify(null);
+    await runDeliberation(finalQuestion, runAs);
+  };
+
+  const skipClarification = async () => {
+    if (!clarify) return;
+    const base = clarify.baseQuestion;
+    const runAs = clarify.runAs;
+    setDispatchInfo({ mode: clarify.mode, runAs, reasoning: clarify.reasoning });
+    setClarify(null);
+    await runDeliberation(base, runAs);
+  };
+
+  // ═══════════════════════════════════════════════════════
   // Follow-up (step 8)
   // ═══════════════════════════════════════════════════════
 
@@ -380,6 +426,14 @@ export default function LifeBoard() {
           onStart={startSession}
           mode={deliberationMode}
           setMode={setDeliberationMode}
+        />
+      )}
+      {screen === 'clarify' && clarify && (
+        <ClarifyScreen
+          clarify={clarify}
+          onSubmit={submitClarification}
+          onSkip={skipClarification}
+          onBack={() => { setClarify(null); setScreen('setup'); }}
         />
       )}
       {screen === 'session' && currentCouncil && (
@@ -712,6 +766,70 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
             .setup-grid { grid-template-columns: 1fr !important; }
           }
         `}</style>
+      </section>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLARIFY SCREEN — o board pergunta antes de deliberar
+// ═══════════════════════════════════════════════════════════
+
+function ClarifyScreen({ clarify, onSubmit, onSkip, onBack }) {
+  const [answers, setAnswers] = useState(clarify.questions.map(() => ''));
+  const [busy, setBusy] = useState(false);
+
+  const setAnswer = (i, val) => setAnswers((prev) => prev.map((x, j) => (j === i ? val : x)));
+  const handle = async (fn) => { setBusy(true); await fn(); };
+
+  return (
+    <div style={{ position: 'relative', minHeight: '100vh' }}>
+      <div className="grid-bg" style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }} />
+
+      <nav style={{ position: 'relative', zIndex: 10, borderBottom: '1px solid var(--line)' }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 32px', display: 'flex', alignItems: 'center' }}>
+          <button onClick={onBack} style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)' }}>
+            <ArrowLeft /> Voltar
+          </button>
+        </div>
+      </nav>
+
+      <section style={{ position: 'relative', zIndex: 10, maxWidth: 760, margin: '0 auto', padding: '56px 32px' }}>
+        <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--accent)' }}>
+          DeepSeek · antes de deliberar
+        </div>
+        <h2 className="serif" style={{ fontSize: 'clamp(1.8rem, 3.5vw, 2.6rem)', margin: '12px 0 0' }}>
+          O board quer entender melhor
+        </h2>
+        {clarify.reasoning && (
+          <p style={{ marginTop: 12, fontSize: 15, color: 'var(--text-dim)' }}>{clarify.reasoning}</p>
+        )}
+
+        <div style={{ marginTop: 32 }}>
+          {clarify.questions.map((q, i) => (
+            <div key={i} style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 500, marginBottom: 8 }}>
+                {i + 1}. {q}
+              </label>
+              <textarea
+                value={answers[i]}
+                onChange={(e) => setAnswer(i, e.target.value)}
+                placeholder="Sua resposta (opcional)…"
+                rows={2}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--text)', fontSize: 14, resize: 'vertical' }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <button className="btn-primary" disabled={busy} style={{ padding: '12px 20px' }} onClick={() => handle(() => onSubmit(answers))}>
+            Responder e deliberar <ArrowRight />
+          </button>
+          <button className="btn-ghost" disabled={busy} style={{ padding: '12px 20px' }} onClick={() => handle(onSkip)}>
+            Pular — deliberar assim mesmo
+          </button>
+        </div>
       </section>
     </div>
   );
