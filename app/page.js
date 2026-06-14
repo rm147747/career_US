@@ -292,7 +292,7 @@ export default function LifeBoard() {
               prev.map((r, i) => {
                 if (r.llm !== ev.counselorId) return r;
                 accumulatedText.current[i] = ev.text;
-                return { ...r, text: ev.text, streaming: true, done: false }; // ainda vem a crítica
+                return { ...r, text: ev.text, streaming: true, done: false, hybrid: true }; // ainda vem a crítica
               })
             );
           },
@@ -300,9 +300,9 @@ export default function LifeBoard() {
             setResponses((prev) =>
               prev.map((r, i) => {
                 if (r.llm !== ev.counselorId) return r;
-                const merged = `${r.text}\n\n**↳ Crítica aos pares**\n${ev.text}`;
-                accumulatedText.current[i] = merged;
-                return { ...r, text: merged, streaming: false, done: true };
+                // texto da rodada 1 fica em r.text; a crítica (rodada 2) em r.critique — rotuladas separadamente na UI
+                accumulatedText.current[i] = `${r.text}\n\n**↳ Crítica aos pares (rodada 2)**\n${ev.text}`;
+                return { ...r, critique: ev.text, streaming: false, done: true };
               })
             );
           },
@@ -1211,11 +1211,32 @@ function ResponseCard({ index, response: r, onOpenDebate }) {
         )}
       </header>
 
+      {/* Modo híbrido: rotula a opinião independente (rodada 1) */}
+      {r.hybrid && !isPresident && (
+        <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 8 }}>
+          Opinião independente · rodada 1
+        </div>
+      )}
+
       <div
         className="markdown-body"
         style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text)' }}
         dangerouslySetInnerHTML={{ __html: renderMarkdown(r.text) || (r.streaming ? '' : '<em style="color:var(--text-faint)">aguardando...</em>') }}
       />
+
+      {/* Modo híbrido: crítica cruzada (rodada 2) — bloco visualmente separado */}
+      {r.critique && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed var(--line-strong)' }}>
+          <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--accent)', marginBottom: 8 }}>
+            ↳ Após ler os pares · rodada 2
+          </div>
+          <div
+            className="markdown-body"
+            style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-dim)' }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(r.critique) }}
+          />
+        </div>
+      )}
 
       {r.citations && r.citations.length > 0 && (
         <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
