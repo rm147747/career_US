@@ -62,6 +62,23 @@ export const LLMS = [
 // 13 conselhos com personas pré-configuradas
 export const COUNCILS = [
   {
+    id: 'universal',
+    icon: 'i-board',
+    title: 'Board Universal',
+    subtitle: 'Descreva o momento e a dúvida — o board assume de qualquer ângulo',
+    tagline: 'adaptativo · 6 lentes · recomendação final',
+    decisive: true,
+    personas: {
+      claude: { role: 'Ética & Experiência Humana', brief: 'Clareza, experiência do usuário, riscos humanos, comunicação e implicações éticas da decisão' },
+      perplexity: { role: 'Pesquisa & Evidências', brief: 'Mercado, concorrentes, fatos externos verificáveis e dados atualizados — sempre com fonte' },
+      gemini: { role: 'Produto & Ecossistema', brief: 'Integração com ecossistemas, multimodalidade, viabilidade de produto escalável' },
+      deepseek: { role: 'Engenharia & Custo', brief: 'Eficiência técnica, custo, arquitetura enxuta e oportunidades de automação' },
+      grok: { role: 'Contraponto & Cultura', brief: 'Provocação construtiva, tendências, cultura e a visão não convencional que o consenso ignora' },
+      gpt: { role: 'Presidente — Estratégia & Decisão', brief: 'Síntese executiva, estratégia, plano de ação e recomendação final com nível de confiança' },
+    },
+    userQuestion: 'Descreva o momento e a dúvida: o contexto, a decisão que precisa tomar, as opções na mesa, restrições (tempo, dinheiro, pessoas) e o que você espera obter do board.',
+  },
+  {
     id: 'career',
     icon: 'i-career',
     title: 'Conselho de Carreira',

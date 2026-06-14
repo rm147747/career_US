@@ -128,7 +128,7 @@ export async function POST(req) {
         let presidentSystem
         if (isPromptAdvisor)     presidentSystem = buildPromptAdvisorPresidentSystemPrompt()
         else if (isPersonaBoard) presidentSystem = buildPersonaBoardPresidentSystemPrompt()
-        else                     presidentSystem = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, parallelMode: true })
+        else                     presidentSystem = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, parallelMode: true, decisive: council.decisive || false })
 
         const presStream = await streamFromOpenRouter({
           model: president.model, fallbackModel: president.fallbackModel,

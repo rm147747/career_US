@@ -88,7 +88,7 @@ export async function POST(req) {
     if (isPresident) {
       if (isPromptAdvisor)     systemPrompt = buildPromptAdvisorPresidentSystemPrompt()
       else if (isPersonaBoard) systemPrompt = buildPersonaBoardPresidentSystemPrompt()
-      else                     systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase })
+      else                     systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, decisive: council.decisive || false })
     } else {
       if (isPromptAdvisor)     systemPrompt = buildPromptAdvisorSystemPrompt({ counselorName: counselor.name, role: persona.role, brief: persona.brief })
       else if (isPersonaBoard) systemPrompt = buildPersonaBoardSystemPrompt({ role: persona.role, brief: persona.brief })
