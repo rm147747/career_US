@@ -204,6 +204,87 @@ export async function streamFromOpenRouter({ model, fallbackModel, messages, tem
 }
 
 /**
+ * Chamada não-streaming ao OpenRouter — retorna o texto completo da resposta.
+ * Usada pelo dispatcher (triagem) que precisa de um JSON único, não de stream.
+ */
+export async function completeFromOpenRouter({ model, fallbackModel, messages, temperature = 0.3, maxTokens = 600, responseFormat }) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY não configurada.');
+  }
+
+  const buildBody = (modelToUse) => {
+    const body = { model: modelToUse, messages, temperature, max_tokens: maxTokens, stream: false };
+    if (responseFormat) body.response_format = responseFormat;
+    return body;
+  };
+
+  const attempt = (modelToUse) =>
+    fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://career-us.vercel.app',
+        'X-Title': 'Life Board',
+      },
+      body: JSON.stringify(buildBody(modelToUse)),
+    });
+
+  let res = await attempt(model);
+  if (!res.ok && fallbackModel && (res.status === 400 || res.status === 404)) {
+    const errText = await res.clone().text().catch(() => '');
+    if (/not a valid model|model.{0,20}not found|no endpoints/i.test(errText)) {
+      res = await attempt(fallbackModel);
+    }
+  }
+  if (!res.ok) {
+    const errText = await res.text().catch(() => 'unknown');
+    throw new Error(`OpenRouter ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content ?? '';
+}
+
+/**
+ * System prompt do dispatcher (DeepSeek). Lê a pergunta do usuário e decide:
+ * - modo de deliberação (parallel | sequential | hybrid)
+ * - se precisa de perguntas de esclarecimento antes de deliberar
+ * - formato de saída sugerido
+ * Retorna SEMPRE JSON estrito.
+ */
+export function buildDispatcherSystemPrompt() {
+  return `Você é o roteador do Life Board — um board de 6 conselheiros IA que delibera sobre decisões. Sua tarefa NÃO é responder à pergunta, e sim DECIDIR COMO o board deve deliberar sobre ela.
+
+Analise a pergunta do usuário e responda APENAS com um objeto JSON válido, sem markdown, sem cercas de código, sem texto antes ou depois. Schema exato:
+
+{
+  "mode": "parallel" | "sequential" | "hybrid",
+  "reasoning": "1 frase curta em PT-BR explicando a escolha do modo",
+  "needsClarification": true | false,
+  "clarifyingQuestions": ["pergunta 1", "pergunta 2"],
+  "suggestedFormat": "executive" | "complete" | "premium"
+}
+
+Regras de decisão do modo:
+- "parallel": brainstorm, avaliação geral, diagnóstico amplo, comparar opções, gerar perspectivas diversas. Conselheiros respondem independentes.
+- "sequential": decisão complexa e encadeada (lançar/não lançar, escolher modelo de negócio, priorizar roadmap, validar investimento) onde cada voz deve construir sobre a anterior.
+- "hybrid": quando há tanto exploração ampla QUANTO necessidade de confronto entre visões — todos opinam em paralelo, depois criticam-se, e o presidente sintetiza.
+
+Regras de esclarecimento:
+- needsClarification=true só quando a pergunta está vaga o bastante para comprometer a qualidade. Gere no máximo 3 perguntas objetivas e específicas.
+- Se a pergunta já tem contexto suficiente, needsClarification=false e clarifyingQuestions=[].
+
+Regras de formato:
+- "executive": pergunta direta, usuário quer decisão rápida.
+- "complete": usuário quer ver a opinião de cada conselheiro.
+- "premium": decisão estratégica de alto risco que pede diagnóstico, matriz de decisão e roadmap.
+
+Responda só o JSON.`;
+}
+
+/**
  * Constrói o system prompt de um conselheiro.
  */
 export function buildCounselorSystemPrompt({ councilTitle, counselorName, role, brief, boardPrinciples, knowledgeBase, parallelMode = false }) {
