@@ -21,6 +21,7 @@ export default function LifeBoard() {
   const [userQuestion, setUserQuestion] = useState('');
   const [setupAttachments, setSetupAttachments] = useState([]); // anexos da pergunta inicial
   const [deliberationMode, setDeliberationMode] = useState('auto'); // 'auto' | 'sequential' | 'parallel'
+  const [outputFormat, setOutputFormat] = useState('auto'); // 'auto' | 'executive' | 'complete' | 'premium'
   const [dispatchInfo, setDispatchInfo] = useState(null); // { mode, reasoning } — escolha do DeepSeek
   const [clarify, setClarify] = useState(null); // { baseQuestion, questions, mode, runAs, reasoning } — perguntas do board
 
@@ -73,10 +74,13 @@ export default function LifeBoard() {
     const attachmentsBlock = buildAttachmentsBlock(setupAttachments);
     const enrichedQuestion = userQuestion + attachmentsBlock;
 
+    // Formato: 'auto' usa a sugestão do dispatcher; senão usa o escolhido.
+    const resolveFormat = (suggested) => (outputFormat === 'auto' ? (suggested || 'complete') : outputFormat);
+
     // Modo manual: vai direto pra deliberação.
     if (deliberationMode !== 'auto') {
       setDispatchInfo(null);
-      await runDeliberation(enrichedQuestion, deliberationMode);
+      await runDeliberation(enrichedQuestion, deliberationMode, resolveFormat(null));
       return;
     }
 
@@ -94,24 +98,25 @@ export default function LifeBoard() {
       });
       const d = await res.json();
       const runAs = ['sequential', 'parallel', 'hybrid'].includes(d.mode) ? d.mode : 'parallel';
+      const resolvedFormat = resolveFormat(d.suggestedFormat);
 
       // Se o board quer entender melhor, abre a tela de esclarecimento antes.
       if (d.needsClarification && Array.isArray(d.clarifyingQuestions) && d.clarifyingQuestions.length) {
-        setClarify({ baseQuestion: enrichedQuestion, questions: d.clarifyingQuestions, mode: d.mode, runAs, reasoning: d.reasoning });
+        setClarify({ baseQuestion: enrichedQuestion, questions: d.clarifyingQuestions, mode: d.mode, runAs, reasoning: d.reasoning, format: resolvedFormat });
         setScreen('clarify');
         return;
       }
 
       setDispatchInfo({ mode: d.mode, runAs, reasoning: d.reasoning });
-      await runDeliberation(enrichedQuestion, runAs);
+      await runDeliberation(enrichedQuestion, runAs, resolvedFormat);
     } catch {
       setDispatchInfo({ mode: 'parallel', runAs: 'parallel', reasoning: 'Roteamento indisponível — usando paralelo.' });
-      await runDeliberation(enrichedQuestion, 'parallel');
+      await runDeliberation(enrichedQuestion, 'parallel', resolveFormat(null));
     }
   };
 
-  // Executa a deliberação no modo resolvido (parallel | sequential).
-  const runDeliberation = async (enrichedQuestion, resolvedMode) => {
+  // Executa a deliberação no modo resolvido (parallel | sequential | hybrid).
+  const runDeliberation = async (enrichedQuestion, resolvedMode, format = 'complete') => {
     setScreen('session');
     setCurrentStep(0);
     setIsDone(false);
@@ -133,11 +138,11 @@ export default function LifeBoard() {
     setResponses(initial);
 
     if (resolvedMode === 'parallel') {
-      await runParallelSession(enrichedQuestion, initial);
+      await runParallelSession(enrichedQuestion, initial, format);
       return;
     }
     if (resolvedMode === 'hybrid') {
-      await runHybridSession(enrichedQuestion, initial);
+      await runHybridSession(enrichedQuestion, initial, format);
       return;
     }
 
@@ -171,6 +176,7 @@ export default function LifeBoard() {
             counselorId: c.id,
             userQuestion: enrichedQuestion,
             priorResponses,
+            format,
           },
           {
             onDelta: (_delta, full) => {
@@ -220,7 +226,7 @@ export default function LifeBoard() {
   // mútua; presidente sintetiza no final. Requer login + créditos.
   // ═══════════════════════════════════════════════════════
 
-  const runParallelSession = async (enrichedQuestion, initial) => {
+  const runParallelSession = async (enrichedQuestion, initial, format = 'complete') => {
     const presIdx = initial.findIndex((r) => r.isPresident);
 
     // todos os conselheiros (exceto presidente) deliberam ao mesmo tempo
@@ -228,7 +234,7 @@ export default function LifeBoard() {
 
     try {
       await streamParallel(
-        { councilId: currentCouncil.id, userQuestion: enrichedQuestion },
+        { councilId: currentCouncil.id, userQuestion: enrichedQuestion, format },
         {
           onCounselor: (ev) => {
             setResponses((prev) =>
@@ -273,13 +279,13 @@ export default function LifeBoard() {
   // (anexada ao card de cada conselheiro) → presidente sintetiza.
   // ═══════════════════════════════════════════════════════
 
-  const runHybridSession = async (enrichedQuestion, initial) => {
+  const runHybridSession = async (enrichedQuestion, initial, format = 'complete') => {
     const presIdx = initial.findIndex((r) => r.isPresident);
     setResponses(initial.map((r) => ({ ...r, streaming: !r.isPresident })));
 
     try {
       await streamHybrid(
-        { councilId: currentCouncil.id, userQuestion: enrichedQuestion },
+        { councilId: currentCouncil.id, userQuestion: enrichedQuestion, format },
         {
           onCounselor: (ev) => {
             setResponses((prev) =>
@@ -343,19 +349,18 @@ export default function LifeBoard() {
       .map((q, i) => `P: ${q}\nR: ${(answers[i] || '').trim() || '(sem resposta)'}`)
       .join('\n\n');
     const finalQuestion = `${clarify.baseQuestion}\n\n**Esclarecimentos do usuário:**\n${qa}`;
-    const runAs = clarify.runAs;
+    const { runAs, format } = clarify;
     setDispatchInfo({ mode: clarify.mode, runAs, reasoning: clarify.reasoning });
     setClarify(null);
-    await runDeliberation(finalQuestion, runAs);
+    await runDeliberation(finalQuestion, runAs, format);
   };
 
   const skipClarification = async () => {
     if (!clarify) return;
-    const base = clarify.baseQuestion;
-    const runAs = clarify.runAs;
+    const { baseQuestion, runAs, format } = clarify;
     setDispatchInfo({ mode: clarify.mode, runAs, reasoning: clarify.reasoning });
     setClarify(null);
-    await runDeliberation(base, runAs);
+    await runDeliberation(baseQuestion, runAs, format);
   };
 
   // ═══════════════════════════════════════════════════════
@@ -490,6 +495,8 @@ export default function LifeBoard() {
           onStart={startSession}
           mode={deliberationMode}
           setMode={setDeliberationMode}
+          format={outputFormat}
+          setFormat={setOutputFormat}
         />
       )}
       {screen === 'clarify' && clarify && (
@@ -651,7 +658,14 @@ function HomeScreen({ onSelectCouncil }) {
 // SETUP SCREEN
 // ═══════════════════════════════════════════════════════════
 
-function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, attachments, setAttachments, onBack, onStart, mode, setMode }) {
+function SetupScreen({ council, counselors, setCounselors, userQuestion, setUserQuestion, attachments, setAttachments, onBack, onStart, mode, setMode, format, setFormat }) {
+  const FORMATS = [
+    { id: 'auto', label: 'Automático', hint: 'O DeepSeek sugere o formato ideal.' },
+    { id: 'executive', label: 'Executivo', hint: 'Decisão, argumentos, riscos, próximos passos. Curto.' },
+    { id: 'complete', label: 'Completo', hint: 'Opinião de cada conselheiro + conflitos + decisão + plano.' },
+    { id: 'premium', label: 'Consultoria', hint: 'Diagnóstico, matriz de decisão, recomendação, roadmap 30/60/90.' },
+  ];
+  const activeFormat = FORMATS.find((f) => f.id === format) || FORMATS[0];
   const updateCounselor = (idx, field, value) => {
     const next = [...counselors];
     next[idx] = { ...next[idx], [field]: value };
@@ -806,6 +820,27 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
                   : mode === 'sequential'
                   ? 'Cada conselheiro lê os anteriores e constrói em cima.'
                   : 'Todos respondem ao mesmo tempo, sem influência mútua.'}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--text-faint)', marginBottom: 8 }}>
+                Formato da resposta final
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {FORMATS.map((f) => (
+                  <button
+                    key={f.id}
+                    className={format === f.id ? 'chip active' : 'chip'}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setFormat(f.id)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-faint)' }}>
+                {activeFormat.hint}
               </div>
             </div>
 

@@ -60,7 +60,7 @@ export async function POST(req) {
       await admin.from('credits_ledger').insert({ user_id: user.id, delta: -1, reason: 'deliberation' })
     }
 
-    const { councilId, counselorId, userQuestion, priorResponses = [] } = await req.json()
+    const { councilId, counselorId, userQuestion, priorResponses = [], format = null } = await req.json()
 
     const council   = getCouncil(councilId)
     const counselor = getLLM(counselorId)
@@ -88,7 +88,7 @@ export async function POST(req) {
     if (isPresident) {
       if (isPromptAdvisor)     systemPrompt = buildPromptAdvisorPresidentSystemPrompt()
       else if (isPersonaBoard) systemPrompt = buildPersonaBoardPresidentSystemPrompt()
-      else                     systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, decisive: council.decisive || false })
+      else                     systemPrompt = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, decisive: council.decisive || false, format })
     } else {
       if (isPromptAdvisor)     systemPrompt = buildPromptAdvisorSystemPrompt({ counselorName: counselor.name, role: persona.role, brief: persona.brief })
       else if (isPersonaBoard) systemPrompt = buildPersonaBoardSystemPrompt({ role: persona.role, brief: persona.brief })

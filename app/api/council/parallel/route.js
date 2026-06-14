@@ -69,7 +69,7 @@ export async function POST(req) {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { councilId, userQuestion } = await req.json()
+  const { councilId, userQuestion, format = null } = await req.json()
   const council = getCouncil(councilId)
   if (!council) return Response.json({ error: 'councilId inválido' }, { status: 400 })
 
@@ -128,7 +128,7 @@ export async function POST(req) {
         let presidentSystem
         if (isPromptAdvisor)     presidentSystem = buildPromptAdvisorPresidentSystemPrompt()
         else if (isPersonaBoard) presidentSystem = buildPersonaBoardPresidentSystemPrompt()
-        else                     presidentSystem = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, parallelMode: true, decisive: council.decisive || false })
+        else                     presidentSystem = buildPresidentSystemPrompt({ councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase, parallelMode: true, decisive: council.decisive || false, format })
 
         const presStream = await streamFromOpenRouter({
           model: president.model, fallbackModel: president.fallbackModel,

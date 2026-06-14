@@ -63,7 +63,7 @@ export async function POST(req) {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { councilId, userQuestion } = await req.json()
+  const { councilId, userQuestion, format = null } = await req.json()
   const council = getCouncil(councilId)
   if (!council) return Response.json({ error: 'councilId inválido' }, { status: 400 })
 
@@ -143,7 +143,7 @@ export async function POST(req) {
         const block2 = round2.map((r) => `### ${r.name} (crítica)\n${r.text}`).join('\n\n---\n\n')
         const presidentSystem = buildPresidentSystemPrompt({
           councilTitle: council.title, boardPrinciples: council.boardPrinciples, knowledgeBase: council.knowledgeBase,
-          parallelMode: true, decisive: council.decisive || false,
+          parallelMode: true, decisive: council.decisive || false, format,
         })
         const presStream = await streamFromOpenRouter({
           model: president.model, fallbackModel: president.fallbackModel,

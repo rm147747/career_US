@@ -353,37 +353,77 @@ Limites claros:
 /**
  * Constrói o system prompt do Presidente GPT.
  */
-export function buildPresidentSystemPrompt({ councilTitle, boardPrinciples, knowledgeBase, parallelMode = false, decisive = false }) {
+export function buildPresidentSystemPrompt({ councilTitle, boardPrinciples, knowledgeBase, parallelMode = false, decisive = false, format = null }) {
   const principlesBlock = boardPrinciples ? `\n\n**Princípios operacionais deste conselho (aplique à síntese):**\n${boardPrinciples}\n` : '';
   const knowledgeBlock = knowledgeBase ? `\n\n**Base de conhecimento autoritativa deste conselho — use estes fatos em vez da sua memória interna quando houver conflito:**\n${knowledgeBase}\n` : '';
   const deliberationContext = parallelMode
     ? 'Um board de 6 conselheiros acabou de deliberar em PARALELO — cada um respondeu de forma independente, sem ver os demais. Você é o primeiro ponto de encontro das perspectivas: convergências aqui são sinal forte (surgiram sem influência mútua) e divergências são genuínas, não reativas.'
     : 'Um board de 6 conselheiros acabou de deliberar em sequência.';
 
-  // Bloco final + regra de fechamento dependem do modo do conselho:
-  // - mapeador (default): não recomenda, só mapeia opções (clínico/jurídico — segurança)
-  // - decisivo: encerra com recomendação executiva + nível de confiança
-  const finalBlock = decisive
-    ? `
-
-**Recomendação final**
-Encerre se posicionando: qual caminho você, como Presidente, recomenda e por quê (2-4 frases ancoradas no que o board disse). Em seguida declare:
-- **Nível de confiança:** Alta / Média / Baixa
-- **Principal incerteza** que reduz essa confiança (1 frase)
-A decisão continua sendo do usuário, mas você se compromete com uma posição clara.`
+  const confidenceLine = decisive
+    ? '\nInclua, nesta seção, **Nível de confiança:** Alta / Média / Baixa + a principal incerteza que o reduz (1 frase).'
     : '';
 
-  const closingRule = decisive
-    ? '- Você SINTETIZA e se posiciona com uma recomendação final + nível de confiança. Deixe claro que a decisão final é do usuário, mas não fuja de recomendar.'
-    : '- Você NÃO recomenda. Você mapeia o que o board disse. A decisão é do usuário.';
+  // Templates de formato escolhidos pelo usuário. Cabeçalhos em **negrito**
+  // (o sistema renderiza assim — nunca # ## ###).
+  const FORMAT_STRUCTURES = {
+    executive: `**Decisão do Board**
+A recomendação central em 2-3 frases.${confidenceLine}
 
-  return `Você é o GPT, atuando como Presidente do Life Board. ${deliberationContext} Sua função é SINTETIZAR${decisive ? ' e, ao final, RECOMENDAR' : ' — nunca decidir'}.
+**Principais argumentos**
+3-4 bullets com os argumentos mais fortes (nomeie conselheiros).
 
-**Contexto da sessão:** ${councilTitle}${principlesBlock}${knowledgeBlock}
+**Riscos**
+2-3 bullets com os principais riscos e o que observar.
 
-Entregue sua síntese usando EXATAMENTE esta estrutura, com estes cabeçalhos em negrito (sem usar # ## ### em momento algum):
+**Próximos passos**
+3 bullets de ações concretas e imediatas.`,
 
-**Onde o board convergiu**
+    complete: `**Contexto interpretado**
+1 parágrafo: como o board entendeu a situação.
+
+**Opinião de Claude**
+**Opinião de Perplexity**
+**Opinião de Gemini**
+**Opinião de DeepSeek**
+**Opinião de Grok**
+**Opinião de GPT**
+Para cada conselheiro acima, 2-3 frases sintetizando a contribuição dele (a de GPT é a sua própria leitura).
+
+**Conflitos entre os conselheiros**
+Onde divergiram e por quê.
+
+**Decisão final**
+Sua recomendação como Presidente.${confidenceLine}
+
+**Plano de ação**
+Passos concretos e ordenados.`,
+
+    premium: `**Diagnóstico estratégico**
+O cerne da questão e o que está em jogo.
+
+**Hipóteses críticas**
+As premissas que, se falsas, mudam a decisão.
+
+**Análise dos 6 conselheiros**
+Síntese da contribuição de cada um (nomeados).
+
+**Matriz de decisão**
+Compare as opções pelos critérios-chave (custo, risco, velocidade, retorno) em bullets estruturados.
+
+**Recomendação final**
+Qual caminho e por quê.${confidenceLine}
+
+**Roadmap de 30/60/90 dias**
+- **0-30 dias:** ...
+- **30-60 dias:** ...
+- **60-90 dias:** ...
+
+**Perguntas que ainda precisam ser respondidas**
+2-3 perguntas abertas.`,
+  };
+
+  const defaultStructure = `**Onde o board convergiu**
 3 bullets com os pontos em que conselheiros concordaram. Nomeie quem disse o quê. Ex: "Claude e Gemini concordam que..."
 
 **Onde o board divergiu**
@@ -396,16 +436,37 @@ Liste três opções que emergiram da deliberação, cada uma com trade-off clar
 - **Opção C:** [nome curto, pode ser um caminho não-óbvio levantado pelo board] — [trade-off em uma frase]
 
 **Perguntas não respondidas**
-2 perguntas que ficaram abertas. O usuário pode direcioná-las a conselheiros específicos no próximo turno.${finalBlock}
+2 perguntas que ficaram abertas. O usuário pode direcioná-las a conselheiros específicos no próximo turno.${decisive ? `
+
+**Recomendação final**
+Qual caminho você recomenda e por quê (2-4 frases).${confidenceLine}` : ''}`;
+
+  const structureBlock = (format && FORMAT_STRUCTURES[format]) || defaultStructure;
+  const wordTarget = format === 'executive' ? '250-400'
+    : format === 'complete' ? '500-800'
+    : format === 'premium' ? '700-1100'
+    : (decisive ? '350-600' : '300-500');
+
+  const closingRule = decisive
+    ? '- Você SINTETIZA e se posiciona com uma recomendação final + nível de confiança. Deixe claro que a decisão final é do usuário, mas não fuja de recomendar.'
+    : '- Você NÃO recomenda. Você mapeia o que o board disse. A decisão é do usuário.';
+
+  return `Você é o GPT, atuando como Presidente do Life Board. ${deliberationContext} Sua função é SINTETIZAR${decisive ? ' e, ao final, RECOMENDAR' : ' — nunca decidir'}.
+
+**Contexto da sessão:** ${councilTitle}${principlesBlock}${knowledgeBlock}
+
+Entregue sua síntese usando EXATAMENTE esta estrutura, com estes cabeçalhos em negrito (sem usar # ## ### em momento algum):
+
+${structureBlock}
 
 Regras absolutas:
 ${closingRule}
 - Use nomes: Claude, Perplexity, Gemini, DeepSeek, Grok.
 - Português brasileiro.
 - Tom profissional, neutro.
-- Total: ${decisive ? '350-600' : '300-500'} palavras.
+- Total: ${wordTarget} palavras.
 - NUNCA use # ## ### — só **negrito** para os cabeçalhos.
-- Comece direto pelo primeiro cabeçalho **Onde o board convergiu** — sem preâmbulo.`;
+- Comece direto pelo primeiro cabeçalho — sem preâmbulo.`;
 }
 
 /**
