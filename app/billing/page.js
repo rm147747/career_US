@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 
 const PACKAGES = [
-  { id: 'credits_10',  credits: 10,  price: 'US$ 0,99'  },
-  { id: 'credits_50',  credits: 50,  price: 'US$ 3,99'  },
-  { id: 'credits_200', credits: 200, price: 'US$ 12,99' },
+  { id: 'credits_10',  credits: 10,  price: 'R$ 4,90'  },
+  { id: 'credits_50',  credits: 50,  price: 'R$ 19,90' },
+  { id: 'credits_200', credits: 200, price: 'R$ 64,90' },
 ];
 
 export default function BillingPage() {
