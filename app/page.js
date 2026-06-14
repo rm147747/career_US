@@ -20,7 +20,8 @@ export default function LifeBoard() {
   const [counselors, setCounselors] = useState([]); // working copy with role/brief from selected council
   const [userQuestion, setUserQuestion] = useState('');
   const [setupAttachments, setSetupAttachments] = useState([]); // anexos da pergunta inicial
-  const [deliberationMode, setDeliberationMode] = useState('sequential'); // 'sequential' | 'parallel'
+  const [deliberationMode, setDeliberationMode] = useState('auto'); // 'auto' | 'sequential' | 'parallel'
+  const [dispatchInfo, setDispatchInfo] = useState(null); // { mode, reasoning } — escolha do DeepSeek
 
   // Session state
   const [responses, setResponses] = useState([]); // [{ llm, name, role, color, text, citations, isPresident, streaming }]
@@ -71,10 +72,31 @@ export default function LifeBoard() {
     setCurrentStep(0);
     setIsDone(false);
     setSessionError(null);
+    setDispatchInfo(null);
 
     // Pergunta final = texto do usuário + bloco de anexos
     const attachmentsBlock = buildAttachmentsBlock(setupAttachments);
     const enrichedQuestion = userQuestion + attachmentsBlock;
+
+    // Modo automático: DeepSeek decide paralelo/sequencial/híbrido antes de deliberar.
+    let resolvedMode = deliberationMode;
+    if (deliberationMode === 'auto') {
+      setDispatchInfo({ loading: true });
+      try {
+        const res = await fetch('/api/council/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userQuestion: enrichedQuestion }),
+        });
+        const d = await res.json();
+        // Híbrido ainda não tem orquestração própria — roda como paralelo por ora.
+        resolvedMode = d.mode === 'sequential' ? 'sequential' : 'parallel';
+        setDispatchInfo({ mode: d.mode, runAs: resolvedMode, reasoning: d.reasoning });
+      } catch {
+        resolvedMode = 'parallel';
+        setDispatchInfo({ mode: 'parallel', runAs: 'parallel', reasoning: 'Roteamento indisponível — usando paralelo.' });
+      }
+    }
 
     // Placeholder response objects pra UI mostrar os cards desde já
     const initial = counselors.map((c) => ({
@@ -90,7 +112,7 @@ export default function LifeBoard() {
     }));
     setResponses(initial);
 
-    if (deliberationMode === 'parallel') {
+    if (resolvedMode === 'parallel') {
       await runParallelSession(enrichedQuestion, initial);
       return;
     }
@@ -369,6 +391,7 @@ export default function LifeBoard() {
           currentStep={currentStep}
           isDone={isDone}
           error={sessionError}
+          dispatchInfo={dispatchInfo}
           onBack={goHome}
           onFollowup={sendFollowup}
           onOpenDebate={(r) => setDebateAgent({ counselorId: r.llm, name: r.name, role: r.role, color: r.color, originalResponse: r.text })}
@@ -638,6 +661,13 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
+                  className={mode === 'auto' ? 'chip active' : 'chip'}
+                  style={{ cursor: 'pointer', flex: 1, justifyContent: 'center' }}
+                  onClick={() => setMode('auto')}
+                >
+                  Automático
+                </button>
+                <button
                   className={mode === 'sequential' ? 'chip active' : 'chip'}
                   style={{ cursor: 'pointer', flex: 1, justifyContent: 'center' }}
                   onClick={() => setMode('sequential')}
@@ -653,7 +683,9 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
                 </button>
               </div>
               <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-faint)' }}>
-                {mode === 'sequential'
+                {mode === 'auto'
+                  ? 'O DeepSeek lê sua pergunta e escolhe o melhor modo (paralelo, sequencial ou híbrido) antes do board deliberar.'
+                  : mode === 'sequential'
                   ? 'Cada conselheiro lê os anteriores e constrói em cima.'
                   : 'Todos respondem ao mesmo tempo, sem influência mútua.'}
               </div>
@@ -670,7 +702,7 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
 
             <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <InfoIcon />
-              {mode === 'sequential' ? 'Deliberação leva ~2-4 min em sequência' : 'Modo paralelo: ~1-2 min, todos simultâneos'}
+              {mode === 'auto' ? 'O DeepSeek decide o modo em ~2s, depois o board delibera' : mode === 'sequential' ? 'Deliberação leva ~2-4 min em sequência' : 'Modo paralelo: ~1-2 min, todos simultâneos'}
             </div>
           </aside>
         </div>
@@ -689,7 +721,8 @@ function SetupScreen({ council, counselors, setCounselors, userQuestion, setUser
 // SESSION SCREEN
 // ═══════════════════════════════════════════════════════════
 
-function SessionScreen({ council, counselors, userQuestion, responses, currentStep, isDone, error, onBack, onFollowup, onOpenDebate }) {
+function SessionScreen({ council, counselors, userQuestion, responses, currentStep, isDone, error, dispatchInfo, onBack, onFollowup, onOpenDebate }) {
+  const MODE_LABELS = { parallel: 'Paralelo', sequential: 'Sequencial', hybrid: 'Híbrido' };
   const originalResponses = responses.slice(0, counselors.length); // primeiros N = deliberação inicial
   const followupResponses = responses.slice(counselors.length);
 
@@ -729,6 +762,31 @@ function SessionScreen({ council, counselors, userQuestion, responses, currentSt
           </div>
         </div>
       </nav>
+
+      {dispatchInfo && (
+        <div style={{ position: 'relative', zIndex: 10, maxWidth: 1600, margin: '12px auto 0', padding: '0 32px' }}>
+          <div className="glass" style={{ borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--accent)' }}>
+              DeepSeek roteou
+            </span>
+            {dispatchInfo.loading ? (
+              <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>escolhendo o melhor modo de deliberação…</span>
+            ) : (
+              <>
+                <span className="chip active">{MODE_LABELS[dispatchInfo.mode] || dispatchInfo.mode}</span>
+                {dispatchInfo.runAs && dispatchInfo.runAs !== dispatchInfo.mode && (
+                  <span className="chip" title="Híbrido roda como paralelo até a orquestração de crítica cruzada">
+                    rodando como {MODE_LABELS[dispatchInfo.runAs]}
+                  </span>
+                )}
+                {dispatchInfo.reasoning && (
+                  <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{dispatchInfo.reasoning}</span>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div style={{ position: 'relative', zIndex: 10, maxWidth: 1600, margin: '12px auto 0', padding: '0 32px' }}>
