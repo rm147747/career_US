@@ -580,20 +580,20 @@ function HomeScreen({ onSelectCouncil }) {
         <div className="fade-up" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
           <span className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--accent)' }}>
-            Deliberative AI · 6 models in sequence
+            Deliberative AI · roteamento adaptativo
           </span>
         </div>
         <h1 className="serif fade-up" style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)', lineHeight: 1.05, margin: 0, maxWidth: 900, animationDelay: '0.1s' }}>
           Um conselho de <em className="serif" style={{ color: 'var(--accent)', fontStyle: 'italic' }}>seis mentes</em> para toda decisão que importa.
         </h1>
         <p className="fade-up" style={{ marginTop: 24, fontSize: 18, maxWidth: 640, color: 'var(--text-dim)', animationDelay: '0.2s' }}>
-          Claude, Perplexity, Gemini, DeepSeek, Grok e GPT deliberam em sequência. Cada um vê o anterior, constrói em cima, e o GPT preside sintetizando. <em style={{ color: 'var(--text)', fontStyle: 'italic' }}>Você decide.</em>
+          Claude, Perplexity, Gemini, DeepSeek, Grok e GPT. O DeepSeek lê sua dúvida e escolhe como o board delibera — em paralelo, em sequência ou em modo híbrido com crítica cruzada. O GPT preside e fecha com uma <em style={{ color: 'var(--text)', fontStyle: 'italic' }}>recomendação e nível de confiança.</em>
         </p>
         <div className="fade-up" style={{ marginTop: 32, display: 'flex', flexWrap: 'wrap', gap: 8, animationDelay: '0.3s' }}>
           <span className="chip"><span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)' }} />6 conselheiros LLM</span>
-          <span className="chip">Síntese do presidente</span>
-          <span className="chip">Medidor de divergência</span>
-          <span className="chip">Perguntas dirigidas · debate 1-on-1</span>
+          <span className="chip">Modo escolhido pelo DeepSeek</span>
+          <span className="chip">Recomendação final com confiança</span>
+          <span className="chip">Perguntas de esclarecimento · debate 1-on-1</span>
         </div>
       </section>
 
@@ -602,20 +602,22 @@ function HomeScreen({ onSelectCouncil }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
           <div>
             <div className="mono" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'var(--text-faint)' }}>
-              01 — Escolha o conselho
+              01 — Comece a deliberação
             </div>
             <h2 className="serif" style={{ fontSize: 30, marginTop: 8, margin: '8px 0 0' }}>
-              Em que contexto você precisa deliberar?
+              Leve qualquer decisão ao board.
             </h2>
           </div>
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Filtrar conselhos..."
-            style={{ width: 240 }}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
+          {COUNCILS.length > 1 && (
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Filtrar conselhos..."
+              style={{ width: 240 }}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+          )}
         </div>
 
         <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16 }}>
